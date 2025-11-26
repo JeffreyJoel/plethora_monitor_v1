@@ -1,15 +1,28 @@
 use alloy::primitives::address;
+use alloy_chains::{Chain, NamedChain};
+use anyhow::Context;
+use dotenvy::dotenv;
+use foundry_block_explorers::Client;
 use monitor::PollingMonitor;
-use std::fs::File;
+use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    dotenv().ok();
     let rpc_url = "https://sepolia.base.org";
+
+    let chain = Chain::from(NamedChain::BaseSepolia);
+
+    let etherscan_api_key =
+        env::var("ETHERSCAN_API_KEY").context("ETHERSCAN_API_KEY must be set in your .env file")?;
+
+    let client = Client::new(chain, &etherscan_api_key)?;
 
     let contract_addr = address!("0x036CbD53842c5426634e7929541eC2318f3dCF7e"); //USDC address on Base Sepolia
 
-    let abi_file = File::open("data/erc_20.json")?;
-    let abi: serde_json::Value = serde_json::from_reader(abi_file)?;
+    let abi = client
+        .contract_abi("0x036CbD53842c5426634e7929541eC2318f3dCF7e".parse()?)
+        .await?;
 
     let monitor = PollingMonitor::new(rpc_url, contract_addr, abi)?;
 

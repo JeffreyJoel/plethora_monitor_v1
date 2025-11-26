@@ -10,7 +10,6 @@ use alloy::network::Ethereum;
 use alloy::primitives::{Address, B256};
 use alloy::providers::{Provider, ProviderBuilder, RootProvider};
 use alloy::rpc::types::{Filter, Log};
-use serde_json::Value;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -28,16 +27,13 @@ impl PollingMonitor {
     pub fn new(
         rpc_url: &str,
         contract_address: Address,
-        abi_json: Value,
+        contract_abi: JsonAbi,
     ) -> Result<Self, anyhow::Error> {
         // Set up the HTTP provider using the provided RPC URL.
         let url = rpc_url.parse()?;
         let provider = ProviderBuilder::new()
             .disable_recommended_fillers()
             .connect_http(url);
-
-        // Parse the contract ABI from the given JSON value.
-        let contract_abi: JsonAbi = serde_json::from_value(abi_json)?;
 
         Ok(Self {
             provider,

@@ -5,9 +5,8 @@ edition = "2024"
 
 [dependencies]
 alloy = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true }
 url = { workspace = true }
 serde_json = { workspace = true }
-futures-util = { workspace = true }

@@ -5,8 +5,12 @@ edition = "2024"
 
 [dependencies]
 monitor = { path = "../../crates/monitor" }
+
 alloy = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+alloy-chains = { workspace = true }
+dotenvy = { workspace = true }
+foundry-block-explorers = { workspace = true }
+serde = { workspace = true }
 anyhow = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
