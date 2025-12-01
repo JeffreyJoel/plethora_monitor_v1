@@ -15,8 +15,9 @@ edition = "2024"
 alloy = { version = "1.1.0", features = ["full"] }
 alloy-chains = "0.2.20"
 anyhow = "1.0.100"
+config = "0.13"
 dotenvy = "0.15.7"
-futures-util = "0.3.31"
+futures = "0.3.31"
 foundry-block-explorers = "0.22.0"
 url = "2.5.0"
 tokio = { version = "1.37.0", features = ["full"] }
