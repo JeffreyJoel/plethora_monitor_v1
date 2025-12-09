@@ -1,4 +1,9 @@
-use alloy::{consensus::Transaction, primitives::Address};
+use alloy::{
+    network::{TransactionBuilder, TransactionResponse},
+    primitives::{Address, Bytes},
+    providers::{Provider, ProviderBuilder},
+    rpc::types::TransactionRequest,
+};
 use alloy_chains::{Chain, NamedChain};
 use anyhow::Context;
 use config::AppConfig;
@@ -29,9 +34,20 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let client = Client::new(chain, &etherscan_api_key)?;
 
-        let addr: Address = monitor_cfg.address.parse()?;
+        // Check the contract address whether its a proxy contract and then return the impl contract address
+        // and get the abi for that
+        let addr = Address::from_str(&monitor_cfg.address)?;
+        let provider = ProviderBuilder::new().connect_http(monitor_cfg.rpc_url.parse()?);
+        let tx = TransactionRequest::default()
+            .with_to(addr)
+            .with_input("0x5c60da1b".parse::<Bytes>()?); // implementation()
 
-        let abi = client.contract_abi(addr).await?;
+        let target_addr = match provider.call(tx).await {
+            Ok(bytes) if bytes.len() >= 32 => Address::from_slice(&bytes[12..32]),
+            _ => addr,
+        };
+
+        let abi = client.contract_abi(target_addr).await?;
 
         let state_file = format!(
             "state_{}.json",
@@ -55,8 +71,8 @@ async fn main() -> Result<(), anyhow::Error> {
                             .monitor_transactions_polling(funcs, move |tx| {
                                 println!("--------------------------------");
                                 println!("[{}] FUNCTION CALL DETECTED", name_clone);
-                                println!("Tx Hash: {:?}", tx.inner.hash());
-                                println!("To: {:?}", tx.inner.to());
+                                println!("Tx Hash: {:?}", tx.tx_hash());
+                                println!("From: {:?}", tx.from());
                                 println!("--------------------------------");
                             })
                             .await
@@ -76,8 +92,17 @@ async fn main() -> Result<(), anyhow::Error> {
                     if let Err(e) = monitor
                         .monitor_events_polling(&event_refs, move |log| {
                             println!("--------------------------------");
-                            println!("[{}] EVENT DETECTED!", name);
+                            if let Some(topic0) = log.topics().first() {
+                                // Find event by selector
+                                if let Some(event) =
+                                    abi.clone().events().find(|e| e.selector() == *topic0)
+                                {
+                                    println!("{}  EVENT DETECTED! on Monitor {}", event.name, name);
+                                }
+                            }
                             println!("Block Number: {:?}", log.block_number);
+                            println!("Transaction Hash: {:?}", log.transaction_hash);
+                            println!("Transaction data: {:?}", log.data());
                             println!("--------------------------------");
                         })
                         .await

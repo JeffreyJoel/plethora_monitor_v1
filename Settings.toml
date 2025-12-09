@@ -3,11 +3,19 @@ name = "USDC Monitor"
 rpc_url = "https://sepolia.base.org"
 chain = "base-sepolia"
 address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
-events = ["Transfer", "Approval"]
+events = ["Transfer"]
 
 [[monitors]]
 name = "WETH Monitor"
-rpc_url = "https://base-sepolia.g.alchemy.com/v2/mUiJxXhqBR87Lg7O8pmNJWgFJQ0DbcqG"
+rpc_url = "https://sepolia.base.org"
 chain = "base-sepolia"
 address = "0x4200000000000000000000000000000000000006"
 events = ["Deposit", "Withdrawal"]
+
+
+[[monitors]]
+name = "USDC Transfer Function Monitor"
+rpc_url = "https://sepolia.base.org"
+chain = "base-sepolia"
+address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+functions = ["transfer"]

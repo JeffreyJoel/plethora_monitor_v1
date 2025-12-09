@@ -9,8 +9,10 @@
 use crate::PollingMonitor;
 use alloy::consensus::Transaction as TransactionTrait;
 use alloy::hex;
+use alloy::network::{AnyRpcTransaction, TransactionResponse};
+use alloy::primitives::address;
 use alloy::providers::Provider;
-use alloy::rpc::types::{BlockTransactions, Transaction};
+use alloy::rpc::types::BlockTransactions;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -22,7 +24,7 @@ pub trait TransactionMonitor {
         handler: F,
     ) -> Result<(), anyhow::Error>
     where
-        F: FnMut(Transaction) + Send + 'static;
+        F: FnMut(AnyRpcTransaction) + Send + 'static;
 }
 
 impl TransactionMonitor for PollingMonitor {
@@ -32,7 +34,7 @@ impl TransactionMonitor for PollingMonitor {
         mut handler: F,
     ) -> Result<(), anyhow::Error>
     where
-        F: FnMut(Transaction) + Send + 'static,
+        F: FnMut(AnyRpcTransaction) + Send + 'static,
     {
         println!(
             "TxMonitor: Watching transactions for {:?}",
@@ -41,6 +43,7 @@ impl TransactionMonitor for PollingMonitor {
 
         // This converts the functiion names into their corresponding selectors using the contract ABI.
         let mut selectors: Vec<Vec<u8>> = Vec::new();
+
         for func_name in function_names {
             if let Some(funcs) = self.contract_abi.functions.get(&func_name) {
                 if let Some(func) = funcs.first() {
@@ -57,15 +60,7 @@ impl TransactionMonitor for PollingMonitor {
             }
         }
 
-        // We check if we have a saved state, otherwise we start from the current block.
-        let latest_on_chain = self.provider.get_block_number().await?;
-        let mut current_block = if let Some(saved_block) = self.load_state().await {
-            println!("Resuming Tx Monitor from block: {}", saved_block);
-            saved_block
-        } else {
-            println!("Starting Tx Monitor from head: {}", latest_on_chain);
-            latest_on_chain
-        };
+        let current_block = self.provider.get_block_number().await?;
 
         loop {
             let latest_block = match self.provider.get_block_number().await {
@@ -81,29 +76,28 @@ impl TransactionMonitor for PollingMonitor {
                 let target_block = current_block + 1;
 
                 // We request the block by number to get all the transactio details in that block
-                match self.provider.get_block_by_number(target_block.into()).await {
+                match self
+                    .provider
+                    .get_block_by_number(target_block.into())
+                    .full()
+                    .await
+                {
                     Ok(Some(block)) => {
                         // Alloy returns BlockTransactions enum: either Hashes(Vec<B256>) or Full(Vec<Transaction>)
-                        if let BlockTransactions::Full(txs) = block.transactions {
+                        if let BlockTransactions::Full(txs) = &block.transactions {
                             for tx in txs {
-                                // Filter A: Is it sent TO our contract?
-                                if tx.inner.to() == Some(self.contract_address) {
-                                    // Filter B: Does input data match a function selector?
+                                // temporary tx filter, TODO: create a separate file for filters
+                                if tx.from()
+                                    == address!("0xddb342ecc94236c29a5307d3757d0724d759453c")
+                                {
                                     for selector in &selectors {
-                                        // `tx.input` is a `Bytes` object, which supports `starts_with`
-                                        if tx.inner.input().starts_with(selector) {
+                                        if tx.input().starts_with(selector) {
                                             handler(tx.clone());
-                                            break; // Found a match, stop checking other selectors
+                                            break;
                                         }
                                     }
                                 }
                             }
-                        }
-
-                        // Update state after processing the block
-                        current_block = target_block;
-                        if let Err(e) = self.save_state(current_block).await {
-                            eprintln!("Error saving state: {}", e);
                         }
                     }
                     Ok(None) => {

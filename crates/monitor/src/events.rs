@@ -50,14 +50,7 @@ impl EventMonitor for PollingMonitor {
         }
 
         // this initialises the starting block for polling to the current block number.
-        let mut current_block = if let Some(saved_block) = self.load_state().await {
-            println!(" returning from saved_block: {}", saved_block);
-            saved_block
-        } else {
-            let head = self.provider.get_block_number().await?;
-            println!("  Starting from block: {}", head);
-            head
-        };
+        let current_block = self.provider.get_block_number().await?;
 
         loop {
             let latest_block = match self.provider.get_block_number().await {
@@ -86,11 +79,6 @@ impl EventMonitor for PollingMonitor {
                     Ok(logs) => {
                         for log in logs {
                             handler(log);
-                        }
-                        current_block = latest_block;
-
-                        if let Err(e) = self.save_state(current_block).await {
-                            eprintln!("Error: failed to save state {}", e)
                         }
                     }
                     Err(e) => eprintln!("Error fetching logs: {}", e),

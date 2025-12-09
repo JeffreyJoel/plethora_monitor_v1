@@ -5,13 +5,12 @@ pub use events::EventMonitor;
 pub use tx::TransactionMonitor;
 
 use alloy::json_abi::JsonAbi;
-use alloy::network::Ethereum;
+use alloy::network::AnyNetwork;
 use alloy::primitives::Address;
 use alloy::providers::{ProviderBuilder, RootProvider};
 use serde::{Deserialize, Serialize};
-use tokio::fs;
 
-pub type HttpProvider = RootProvider<Ethereum>;
+pub type HttpProvider = RootProvider<AnyNetwork>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MonitorState {
@@ -36,6 +35,7 @@ impl PollingMonitor {
         let url = rpc_url.parse()?;
         let provider = ProviderBuilder::new()
             .disable_recommended_fillers()
+            .network::<AnyNetwork>()
             .connect_http(url);
 
         Ok(Self {
@@ -44,20 +44,5 @@ impl PollingMonitor {
             contract_abi,
             state_file_path: state_file_path.to_string(),
         })
-    }
-
-    pub async fn load_state(&self) -> Option<u64> {
-        let content = fs::read_to_string(&self.state_file_path).await.ok()?;
-        let state: MonitorState = serde_json::from_str(&content).ok()?;
-        Some(state.last_processed_block)
-    }
-
-    pub async fn save_state(&self, block_number: u64) -> Result<(), anyhow::Error> {
-        let state = MonitorState {
-            last_processed_block: block_number,
-        };
-        let content = serde_json::to_string_pretty(&state)?;
-        fs::write(&self.state_file_path, content).await?;
-        Ok(())
     }
 }
