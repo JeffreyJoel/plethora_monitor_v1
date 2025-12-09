@@ -1,16 +1,18 @@
-use alloy::primitives::Address;
+use alloy::{consensus::Transaction, primitives::Address};
 use alloy_chains::{Chain, NamedChain};
 use anyhow::Context;
 use config::AppConfig;
 use dotenvy::dotenv;
 use foundry_block_explorers::Client;
 use futures::future::join_all;
-use monitor::PollingMonitor;
+use monitor::{EventMonitor, PollingMonitor, TransactionMonitor};
 use std::{env, str::FromStr};
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
+
+    // read from the Settings.toml
     let settings = AppConfig::new().expect("Failed to load Settings.toml");
 
     let etherscan_api_key =
@@ -19,7 +21,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut handles = vec![];
 
     for monitor_cfg in settings.monitors {
-        println!("🚀 Launching monitor: {}", monitor_cfg.name);
+        println!("Launching monitor: {}", monitor_cfg.name);
 
         let named_chain = NamedChain::from_str(&monitor_cfg.chain)?;
 
@@ -36,37 +38,53 @@ async fn main() -> Result<(), anyhow::Error> {
             monitor_cfg.name.replace(" ", "_").to_lowercase()
         );
 
-        let monitor = PollingMonitor::new(&monitor_cfg.rpc_url, addr, abi.clone(), &state_file)
-            .expect("Failed to init monitor");
-
-        // Clone data needed for the thread
-        let events: Vec<String> = monitor_cfg.events.clone();
-        let name = monitor_cfg.name.clone();
-
-        let abi_for_decode = abi.clone();
+        let functions_config = monitor_cfg.functions.clone();
+        let name_clone = monitor_cfg.name.clone();
 
         let handle = tokio::spawn(async move {
-            // Convert Vec<String> to Vec<&str> for the monitor call
-            let event_refs: Vec<&str> = events.iter().map(|s| s.as_str()).collect();
+            let monitor = PollingMonitor::new(&monitor_cfg.rpc_url, addr, abi.clone(), &state_file)
+                .expect("Failed to init monitor");
 
-            if let Err(e) = monitor
-                .monitor_events_polling(&event_refs, move |log| {
-                    println!("--------------------------------");
-                    if let Some(topic0) = log.topics().first() {
-                        // Find event by selector
-                        if let Some(event) =
-                            abi_for_decode.events().find(|e| e.selector() == *topic0)
+            if let Some(funcs) = functions_config {
+                if !funcs.is_empty() {
+                    let monitor_tx = monitor.clone();
+
+                    // Spawn for Transactions
+                    tokio::spawn(async move {
+                        if let Err(e) = monitor_tx
+                            .monitor_transactions_polling(funcs, move |tx| {
+                                println!("--------------------------------");
+                                println!("[{}] FUNCTION CALL DETECTED", name_clone);
+                                println!("Tx Hash: {:?}", tx.inner.hash());
+                                println!("To: {:?}", tx.inner.to());
+                                println!("--------------------------------");
+                            })
+                            .await
                         {
-                            println!("🔥 {}  EVENT DETECTED! on Monitor {}", event.name, name);
+                            eprintln!("Tx Monitor crashed: {:?}", e);
                         }
+                    });
+                }
+            }
+
+            // Run monitor for events
+            if let Some(events) = &monitor_cfg.events {
+                if !events.is_empty() {
+                    let event_refs: Vec<&str> = events.iter().map(|s| s.as_str()).collect();
+                    let name = monitor_cfg.name.clone();
+
+                    if let Err(e) = monitor
+                        .monitor_events_polling(&event_refs, move |log| {
+                            println!("--------------------------------");
+                            println!("[{}] EVENT DETECTED!", name);
+                            println!("Block Number: {:?}", log.block_number);
+                            println!("--------------------------------");
+                        })
+                        .await
+                    {
+                        eprintln!("Event Monitor {} crashed: {:?}", monitor_cfg.name, e);
                     }
-                    println!("Block Number: {:?}", log.block_number);
-                    println!("Log Data: {:?}", log.data());
-                    println!("--------------------------------");
-                })
-                .await
-            {
-                eprintln!("Monitor {} crashed: {:?}", monitor_cfg.name, e);
+                }
             }
         });
 

@@ -1,4 +1,4 @@
-//! # Config Monitor
+//! # Config Structure
 //!
 //! This module defines the configuration structures for monitoring smart contract events.
 //! It uses the `config` crate to load settings from a configuration file named `Settings.toml`.
@@ -12,13 +12,14 @@ pub struct AppConfig {
     pub monitors: Vec<MonitorConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct MonitorConfig {
     pub name: String,
     pub rpc_url: String,
     pub chain: String,
     pub address: String, // We make use of the String type for config, we'll conver to Address during implementation
-    pub events: Vec<String>,
+    pub events: Option<Vec<String>>,
+    pub functions: Option<Vec<String>>,
 }
 
 impl AppConfig {
