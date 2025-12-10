@@ -22,6 +22,6 @@ address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
     name = "Whale Transfer Alert"
     conditions = [
         { Function = "transfer" },
-        {To = "0xddb342ecc94236c29a5307d3757d0724d759453c"},
-        # { Argument = { name = "amount", operator = "Gt", value = "1000000" } }
+        # {To = "0xddb342ecc94236c29a5307d3757d0724d759453c"},
+        # { Argument = { name = "amount", operator = "Eq", value = "200000" } }
     ]

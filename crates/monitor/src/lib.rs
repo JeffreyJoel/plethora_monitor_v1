@@ -23,16 +23,10 @@ pub struct PollingMonitor {
     pub provider: HttpProvider,
     pub contract_address: Address,
     pub contract_abi: JsonAbi,
-    pub state_file_path: String,
 }
 
 impl PollingMonitor {
-    pub fn new(
-        rpc_url: &str,
-        contract_address: Address,
-        contract_abi: JsonAbi,
-        state_file_path: &str,
-    ) -> Result<Self, anyhow::Error> {
+    pub fn new(rpc_url: &str, contract_address: Address, contract_abi: JsonAbi) -> Result<Self, anyhow::Error> {
         let url = rpc_url.parse()?;
         let provider = ProviderBuilder::new()
             .disable_recommended_fillers()
@@ -43,7 +37,6 @@ impl PollingMonitor {
             provider,
             contract_address,
             contract_abi,
-            state_file_path: state_file_path.to_string(),
         })
     }
 }

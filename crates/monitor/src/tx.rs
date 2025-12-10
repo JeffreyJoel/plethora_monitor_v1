@@ -39,7 +39,7 @@ impl TransactionMonitor for PollingMonitor {
             self.contract_address
         );
 
-        let current_block = self.provider.get_block_number().await?;
+        let mut current_block = self.provider.get_block_number().await?;
 
         loop {
             let latest_block = match self.provider.get_block_number().await {
@@ -74,6 +74,7 @@ impl TransactionMonitor for PollingMonitor {
                                 }
                             }
                         }
+                        current_block = target_block;
                     }
                     Ok(None) => {
                         // The block number exists (latest_block) but the block data isn't available yet.

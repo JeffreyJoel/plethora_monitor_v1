@@ -40,7 +40,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let provider = ProviderBuilder::new().connect_http(monitor_cfg.rpc_url.parse()?);
         let tx = TransactionRequest::default()
             .with_to(addr)
-            .with_input("0x5c60da1b".parse::<Bytes>()?); // implementation()
+            .with_input("0x5c60da1b".parse::<Bytes>()?); // implementation function selector
 
         let target_addr = match provider.call(tx).await {
             Ok(bytes) if bytes.len() >= 32 => Address::from_slice(&bytes[12..32]),
@@ -49,24 +49,21 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let abi = client.contract_abi(target_addr).await?;
 
-        let state_file = format!(
-            "state_{}.json",
-            monitor_cfg.name.replace(" ", "_").to_lowercase()
-        );
-
         let functions_config = monitor_cfg.functions.clone();
         let name_clone = monitor_cfg.name.clone();
 
         let handle = tokio::spawn(async move {
-            let monitor = PollingMonitor::new(&monitor_cfg.rpc_url, addr, abi.clone(), &state_file)
+            let monitor = PollingMonitor::new(&monitor_cfg.rpc_url, addr, abi.clone())
                 .expect("Failed to init monitor");
+
+            let mut tx_handle = None;
 
             if let Some(funcs) = functions_config {
                 if !funcs.is_empty() {
                     let monitor_tx = monitor.clone();
 
                     // Spawn for Transactions
-                    tokio::spawn(async move {
+                    tx_handle = Some(tokio::spawn(async move {
                         if let Err(e) = monitor_tx
                             .monitor_transactions_polling(funcs, move |tx| {
                                 println!("--------------------------------");
@@ -79,7 +76,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         {
                             eprintln!("Tx Monitor crashed: {:?}", e);
                         }
-                    });
+                    }));
                 }
             }
 
@@ -93,7 +90,6 @@ async fn main() -> Result<(), anyhow::Error> {
                         .monitor_events_polling(&event_refs, move |log| {
                             println!("--------------------------------");
                             if let Some(topic0) = log.topics().first() {
-                                // Find event by selector
                                 if let Some(event) =
                                     abi.clone().events().find(|e| e.selector() == *topic0)
                                 {
@@ -110,6 +106,11 @@ async fn main() -> Result<(), anyhow::Error> {
                         eprintln!("Event Monitor {} crashed: {:?}", monitor_cfg.name, e);
                     }
                 }
+            }
+
+            // Wait for the transaction monitor if it was spawned
+            if let Some(h) = tx_handle {
+                let _ = h.await;
             }
         });
 
