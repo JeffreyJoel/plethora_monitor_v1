@@ -1,5 +1,6 @@
 pub mod events;
 pub mod filter;
+pub mod primitives;
 pub mod tx;
 
 pub use events::EventMonitor;
@@ -26,7 +27,11 @@ pub struct PollingMonitor {
 }
 
 impl PollingMonitor {
-    pub fn new(rpc_url: &str, contract_address: Address, contract_abi: JsonAbi) -> Result<Self, anyhow::Error> {
+    pub fn new(
+        rpc_url: &str,
+        contract_address: Address,
+        contract_abi: JsonAbi,
+    ) -> Result<Self, anyhow::Error> {
         let url = rpc_url.parse()?;
         let provider = ProviderBuilder::new()
             .disable_recommended_fillers()

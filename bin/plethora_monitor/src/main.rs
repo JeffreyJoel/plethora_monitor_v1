@@ -1,17 +1,13 @@
 use alloy::{
-    network::{TransactionBuilder, TransactionResponse},
-    primitives::{Address, Bytes},
-    providers::{Provider, ProviderBuilder},
-    rpc::types::TransactionRequest,
+    network::{TransactionResponse},
+    primitives::Address,
 };
-use alloy_chains::{Chain, NamedChain};
-use anyhow::Context;
 use config::AppConfig;
 use dotenvy::dotenv;
-use foundry_block_explorers::Client;
 use futures::future::join_all;
+use monitor::primitives::utils;
 use monitor::{EventMonitor, PollingMonitor, TransactionMonitor};
-use std::{env, str::FromStr};
+use std::{str::FromStr};
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -20,34 +16,19 @@ async fn main() -> Result<(), anyhow::Error> {
     // read from the Settings.toml
     let settings = AppConfig::new().expect("Failed to load Settings.toml");
 
-    let etherscan_api_key =
-        env::var("ETHERSCAN_API_KEY").context("ETHERSCAN_API_KEY must be set in your .env file")?;
-
     let mut handles = vec![];
 
     for monitor_cfg in settings.monitors {
         println!("Launching monitor: {}", monitor_cfg.name);
 
-        let named_chain = NamedChain::from_str(&monitor_cfg.chain)?;
-
-        let chain: Chain = Chain::from(named_chain);
-
-        let client = Client::new(chain, &etherscan_api_key)?;
-
-        // Check the contract address whether its a proxy contract and then return the impl contract address
-        // and get the abi for that
         let addr = Address::from_str(&monitor_cfg.address)?;
-        let provider = ProviderBuilder::new().connect_http(monitor_cfg.rpc_url.parse()?);
-        let tx = TransactionRequest::default()
-            .with_to(addr)
-            .with_input("0x5c60da1b".parse::<Bytes>()?); // implementation function selector
 
-        let target_addr = match provider.call(tx).await {
-            Ok(bytes) if bytes.len() >= 32 => Address::from_slice(&bytes[12..32]),
-            _ => addr,
-        };
+        let abi = utils::fetch_abi(
+            &monitor_cfg.chain,
+            &monitor_cfg.address,
+            &monitor_cfg.rpc_url,
+        ).await?;
 
-        let abi = client.contract_abi(target_addr).await?;
 
         let functions_config = monitor_cfg.functions.clone();
         let name_clone = monitor_cfg.name.clone();

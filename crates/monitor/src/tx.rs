@@ -7,7 +7,7 @@
 //! analyzing the `input` field of each transaction to match function selectors.
 
 use crate::PollingMonitor;
-use crate::filter::MonitorRule;
+use crate::primitives::models::MonitorRule;
 use alloy::network::AnyRpcTransaction;
 use alloy::providers::Provider;
 use alloy::rpc::types::BlockTransactions;

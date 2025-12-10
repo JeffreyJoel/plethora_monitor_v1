@@ -1,39 +1,9 @@
+use crate::primitives::models::{Condition, MonitorRule, Operator};
 use alloy::consensus::Transaction;
 use alloy::dyn_abi::{DynSolValue, JsonAbiExt};
-use alloy::json_abi::Function;
 use alloy::network::{AnyRpcTransaction, TransactionResponse};
 use alloy::primitives::{Address, U256};
-use serde::Deserialize;
 use std::str::FromStr;
-
-#[derive(Debug, Clone, Deserialize)]
-pub enum Operator {
-    Eq,
-    Gt,
-    Lt,
-    Contains,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub enum Condition {
-    From(Address),
-    To(String),
-    Function(String),
-    Argument {
-        name: String,
-        operator: Operator,
-        value: String,
-    },
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct MonitorRule {
-    pub name: String,
-    pub conditions: Vec<Condition>,
-
-    #[serde(skip)] //skip this, because we are not fetching the abi function from the toml
-    pub abi_function: Option<Function>,
-}
 
 impl MonitorRule {
     pub fn tx_match(&self, tx: &AnyRpcTransaction) -> bool {
@@ -107,7 +77,7 @@ impl MonitorRule {
                 }
             }
         }
-        return true; // this means all the conditions matched
+        return true;
     }
 }
 

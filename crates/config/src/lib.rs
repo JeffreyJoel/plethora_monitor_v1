@@ -5,7 +5,7 @@
 //! The configuration is deserialized into typed structures (`AppConfig`, `MonitorConfig`) that
 //! specify which contracts to monitor, their addresses, RPC endpoints, and the specific events of interest.
 
-use monitor::filter::MonitorRule;
+use monitor::primitives::models::MonitorRule;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
