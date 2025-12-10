@@ -5,6 +5,7 @@
 //! The configuration is deserialized into typed structures (`AppConfig`, `MonitorConfig`) that
 //! specify which contracts to monitor, their addresses, RPC endpoints, and the specific events of interest.
 
+use monitor::filter::MonitorRule;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -19,7 +20,7 @@ pub struct MonitorConfig {
     pub chain: String,
     pub address: String, // We make use of the String type for config, we'll conver to Address during implementation
     pub events: Option<Vec<String>>,
-    pub functions: Option<Vec<String>>,
+    pub functions: Option<Vec<MonitorRule>>,
 }
 
 impl AppConfig {

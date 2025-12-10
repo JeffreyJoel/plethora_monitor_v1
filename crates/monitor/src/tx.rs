@@ -7,10 +7,8 @@
 //! analyzing the `input` field of each transaction to match function selectors.
 
 use crate::PollingMonitor;
-use alloy::consensus::Transaction as TransactionTrait;
-use alloy::hex;
-use alloy::network::{AnyRpcTransaction, TransactionResponse};
-use alloy::primitives::address;
+use crate::filter::MonitorRule;
+use alloy::network::AnyRpcTransaction;
 use alloy::providers::Provider;
 use alloy::rpc::types::BlockTransactions;
 use std::time::Duration;
@@ -20,7 +18,7 @@ use tokio::time::sleep;
 pub trait TransactionMonitor {
     async fn monitor_transactions_polling<F>(
         self,
-        function_names: Vec<String>,
+        rules: Vec<MonitorRule>,
         handler: F,
     ) -> Result<(), anyhow::Error>
     where
@@ -30,7 +28,7 @@ pub trait TransactionMonitor {
 impl TransactionMonitor for PollingMonitor {
     async fn monitor_transactions_polling<F>(
         self,
-        function_names: Vec<String>,
+        rules: Vec<MonitorRule>,
         mut handler: F,
     ) -> Result<(), anyhow::Error>
     where
@@ -40,25 +38,6 @@ impl TransactionMonitor for PollingMonitor {
             "TxMonitor: Watching transactions for {:?}",
             self.contract_address
         );
-
-        // This converts the functiion names into their corresponding selectors using the contract ABI.
-        let mut selectors: Vec<Vec<u8>> = Vec::new();
-
-        for func_name in function_names {
-            if let Some(funcs) = self.contract_abi.functions.get(&func_name) {
-                if let Some(func) = funcs.first() {
-                    let selector = func.selector().to_vec();
-                    println!(
-                        "  Watching Function: '{}' -> 0x{}",
-                        func_name,
-                        hex::encode(&selector)
-                    );
-                    selectors.push(selector);
-                }
-            } else {
-                eprintln!("Warning: Function '{}' not found in ABI.", func_name);
-            }
-        }
 
         let current_block = self.provider.get_block_number().await?;
 
@@ -86,15 +65,11 @@ impl TransactionMonitor for PollingMonitor {
                         // Alloy returns BlockTransactions enum: either Hashes(Vec<B256>) or Full(Vec<Transaction>)
                         if let BlockTransactions::Full(txs) = &block.transactions {
                             for tx in txs {
-                                // temporary tx filter, TODO: create a separate file for filters
-                                if tx.from()
-                                    == address!("0xddb342ecc94236c29a5307d3757d0724d759453c")
-                                {
-                                    for selector in &selectors {
-                                        if tx.input().starts_with(selector) {
-                                            handler(tx.clone());
-                                            break;
-                                        }
+                                for rule in &rules {
+                                    if rule.tx_match(tx) {
+                                        println!("Match found for rule: {}", rule.name);
+                                        handler(tx.clone());
+                                        break;
                                     }
                                 }
                             }

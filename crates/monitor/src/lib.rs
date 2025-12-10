@@ -1,4 +1,5 @@
 pub mod events;
+pub mod filter;
 pub mod tx;
 
 pub use events::EventMonitor;

@@ -1,16 +1,16 @@
-[[monitors]]
-name = "USDC Monitor"
-rpc_url = "https://sepolia.base.org"
-chain = "base-sepolia"
-address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
-events = ["Transfer"]
+# [[monitors]]
+# name = "USDC Monitor"
+# rpc_url = "https://sepolia.base.org"
+# chain = "base-sepolia"
+# address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+# events = ["Transfer"]
 
-[[monitors]]
-name = "WETH Monitor"
-rpc_url = "https://sepolia.base.org"
-chain = "base-sepolia"
-address = "0x4200000000000000000000000000000000000006"
-events = ["Deposit", "Withdrawal"]
+# [[monitors]]
+# name = "WETH Monitor"
+# rpc_url = "https://sepolia.base.org"
+# chain = "base-sepolia"
+# address = "0x4200000000000000000000000000000000000006"
+# events = ["Withdraw"]
 
 
 [[monitors]]
@@ -18,4 +18,10 @@ name = "USDC Transfer Function Monitor"
 rpc_url = "https://sepolia.base.org"
 chain = "base-sepolia"
 address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
-functions = ["transfer"]
+    [[monitors.functions]]
+    name = "Whale Transfer Alert"
+    conditions = [
+        { Function = "transfer" },
+        {To = "0xddb342ecc94236c29a5307d3757d0724d759453c"},
+        # { Argument = { name = "amount", operator = "Gt", value = "1000000" } }
+    ]

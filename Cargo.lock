@@ -1261,6 +1261,7 @@ name = "config"
 version = "0.1.0"
 dependencies = [
  "config 0.13.4",
+ "monitor",
  "serde",
 ]
 
@@ -2467,6 +2468,7 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "anyhow",
+ "futures",
  "serde",
  "serde_json",
  "tokio",
