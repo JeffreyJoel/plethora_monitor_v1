@@ -20,7 +20,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // start server
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-    println!("🌍 Server running on http://0.0.0.0:3000");
+    println!("Server running on http://0.0.0.0:3000");
 
     axum::serve(listener, app).await?;
 

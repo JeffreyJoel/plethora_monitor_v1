@@ -7,6 +7,9 @@
 //! handlers for each detected event.
 
 use crate::PollingMonitor;
+use crate::primitives::utils::format_value;
+use alloy::dyn_abi::EventExt;
+use alloy::json_abi::JsonAbi;
 use alloy::primitives::B256;
 use alloy::providers::Provider;
 use alloy::rpc::types::{Filter, Log};
@@ -88,5 +91,43 @@ impl EventMonitor for PollingMonitor {
             // wait for a short duration before the next poll.
             sleep(Duration::from_secs(2)).await;
         }
+    }
+}
+
+pub fn get_event_details(log: &Log, abi: &JsonAbi) -> String {
+    let topics = log.topics();
+    if topics.is_empty() {
+        return "Event: Anonymous/Malformed (No topics)".to_string();
+    }
+
+    let selector = topics[0];
+
+    let event = abi.events().find(|e| e.selector() == selector);
+
+    if let Some(e) = event {
+        match e.decode_log(&log.data()) {
+            Ok(decoded) => {
+                let mut output = format!("Event: {}\n", e.name);
+
+                let mut indexed_iter = decoded.indexed.into_iter();
+                let mut body_iter = decoded.body.into_iter();
+
+                for input in &e.inputs {
+                    let val = if input.indexed {
+                        indexed_iter.next()
+                    } else {
+                        body_iter.next()
+                    };
+
+                    if let Some(v) = val {
+                        output.push_str(&format!("- {}: {}\n", input.name, format_value(&v)));
+                    }
+                }
+                output
+            }
+            Err(err) => format!("Event: {} (Decode Error: {})", e.name, err),
+        }
+    } else {
+        format!("Unknown Event (Signature: {})", selector)
     }
 }

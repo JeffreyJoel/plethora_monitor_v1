@@ -8,6 +8,10 @@
 
 use crate::PollingMonitor;
 use crate::primitives::models::{Condition, MonitorRule};
+use crate::primitives::utils::format_value;
+use alloy::consensus::Transaction;
+use alloy::dyn_abi::JsonAbiExt;
+use alloy::hex;
 use alloy::json_abi::JsonAbi;
 use alloy::network::AnyRpcTransaction;
 use alloy::providers::Provider;
@@ -119,4 +123,38 @@ pub fn map_rules_to_abi(mut rules: Vec<MonitorRule>, abi: &JsonAbi) -> Vec<Monit
         }
     }
     rules
+}
+
+// This function decodes transaction input data using the provided ABI and returns a formatted string.
+// This is used to send clear notifications about the transaction details.
+pub fn get_tx_details(tx: &AnyRpcTransaction, abi: &JsonAbi) -> String {
+    let input = tx.input();
+
+    if input.len() < 4 {
+        return "Transaction has no function data".to_string();
+    }
+
+    let selector = &input[0..4];
+    let data = &input[4..];
+
+    let func = abi
+        .functions()
+        .find(|f| f.selector().as_slice() == selector);
+
+    if let Some(f) = func {
+        match f.abi_decode_input(data) {
+            Ok(decoded_inputs) => {
+                let mut output = format!("Function: {}\n", f.name);
+
+                for (i, input_def) in f.inputs.iter().enumerate() {
+                    let val = decoded_inputs.get(i).unwrap();
+                    output.push_str(&format!("- {}: {}\n", input_def.name, format_value(val)));
+                }
+                output
+            }
+            Err(e) => format!("Function: {} (Decode Error: {})", f.name, e),
+        }
+    } else {
+        format!("Unknown Function (Selector: {})", hex::encode(selector))
+    }
 }

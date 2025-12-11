@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 monitor = { path = "../../crates/monitor" }
-config = { path = "../../crates/config" }
 server = { path = "../../crates/server" }
 
 alloy = { workspace = true }

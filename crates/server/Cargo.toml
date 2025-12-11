@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 monitor = { path = "../monitor" }
-config = { path = "../config" }
 
 alloy = { workspace = true }
 anyhow = { workspace = true }

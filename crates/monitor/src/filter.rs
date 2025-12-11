@@ -15,12 +15,7 @@ impl MonitorRule {
                     }
                 }
                 Condition::To(expected) => {
-                    if let Ok(target_address) = Address::from_str(expected) {
-                        if tx.to() != Some(target_address) {
-                            return false;
-                        }
-                    } else {
-                        eprintln!("Invalid address in rule: {}", expected);
+                    if tx.to().unwrap() != *expected {
                         return false;
                     }
                 }

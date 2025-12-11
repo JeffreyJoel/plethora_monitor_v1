@@ -1,7 +1,7 @@
 use crate::state::AppState;
 use axum::{Json, extract::State, http::StatusCode};
-use config::MonitorConfig;
 use monitor::PollingMonitor;
+use monitor::primitives::models::MonitorConfig;
 use monitor::primitives::utils::fetch_abi;
 use monitor::tx::map_rules_to_abi;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ pub async fn create_monitor(
     println!("Creating Monitor '{}' [{}]", payload.name, monitor_id);
 
     // fetch ABI
-    let abi = fetch_abi(&payload.chain, &payload.address, &rpc_url)
+    let abi = fetch_abi(&payload.chain, payload.address, &rpc_url)
         .await
         .map_err(|e| {
             eprintln!("❌ ABI Error: {}", e);
@@ -38,15 +38,17 @@ pub async fn create_monitor(
     let tx_rules = map_rules_to_abi(payload.functions.unwrap_or_default(), &abi);
     let event_names = payload.events.unwrap_or_default();
 
-    let contract_addr = payload
-        .address
-        .parse()
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let contract_addr = payload.address;
 
     let monitor = PollingMonitor::new(&rpc_url, contract_addr, abi)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let handle = monitor.start_background_monitoring(payload.name, tx_rules, event_names);
+    let handle = monitor.start_background_monitoring(
+        payload.name,
+        tx_rules,
+        event_names,
+        payload.email_recipient,
+    );
 
     state
         .active_monitors
