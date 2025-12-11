@@ -25,7 +25,7 @@ struct Recipient {
 }
 
 pub async fn send_email(recipient: &str, subject: &str, body: &str) -> Result<(), anyhow::Error> {
-    let api_key = env::var("SMTP_API_KEY").expect("BREVO_API_KEY must be set");
+    let api_key = env::var("BREVO_API_KEY").expect("BREVO_API_KEY must be set");
     let client = Client::new();
 
     let html = generate_html_alert("Monitor Alert", subject, body, None);
