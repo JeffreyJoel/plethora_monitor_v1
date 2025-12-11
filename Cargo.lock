@@ -2829,6 +2829,7 @@ dependencies = [
  "alloy",
  "alloy-chains",
  "anyhow",
+ "axum",
  "config 0.1.0",
  "dotenvy",
  "foundry-block-explorers",
@@ -2836,6 +2837,7 @@ dependencies = [
  "monitor",
  "serde",
  "serde_json",
+ "server",
  "tokio",
  "url",
 ]

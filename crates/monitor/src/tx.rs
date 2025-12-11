@@ -7,7 +7,8 @@
 //! analyzing the `input` field of each transaction to match function selectors.
 
 use crate::PollingMonitor;
-use crate::primitives::models::MonitorRule;
+use crate::primitives::models::{Condition, MonitorRule};
+use alloy::json_abi::JsonAbi;
 use alloy::network::AnyRpcTransaction;
 use alloy::providers::Provider;
 use alloy::rpc::types::BlockTransactions;
@@ -92,4 +93,30 @@ impl TransactionMonitor for PollingMonitor {
             sleep(Duration::from_secs(2)).await;
         }
     }
+}
+
+/// Helper functions
+
+// this takes in a list of rules, and for every condition in the rule, we get the function to listen for
+// and then map it to the abi definition
+pub fn map_rules_to_abi(mut rules: Vec<MonitorRule>, abi: &JsonAbi) -> Vec<MonitorRule> {
+    for rule in &mut rules {
+        // Find which function this rule targets
+        let target_name = rule.conditions.iter().find_map(|c| {
+            if let Condition::Function(name) = c {
+                Some(name.clone())
+            } else {
+                None
+            }
+        });
+
+        // map it to the first instance of function in the ABI
+        // this is done incase there are multiple instances of the same function in the abi (function overloading)
+        if let Some(name) = target_name {
+            if let Some(func) = abi.function(&name).and_then(|f| f.first()) {
+                rule.abi_function = Some(func.clone());
+            }
+        }
+    }
+    rules
 }
