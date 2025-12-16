@@ -1,8 +1,9 @@
 use alloy::json_abi::Function;
 use alloy::primitives::Address;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Operator {
     Eq,
     Gt,
@@ -10,7 +11,7 @@ pub enum Operator {
     Contains,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Condition {
     From(Address),
     To(Address),
@@ -22,7 +23,7 @@ pub enum Condition {
     },
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitorRule {
     pub name: String,
     pub conditions: Vec<Condition>,
@@ -31,13 +32,14 @@ pub struct MonitorRule {
     pub abi_function: Option<Function>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitorConfig {
     pub name: String,
     pub rpc_url: String,
     pub chain: String,
-    pub address: Address, // We make use of the String type for config, we'll conver to Address during implementation
+    pub address: Address,
     pub events: Option<Vec<String>>,
     pub functions: Option<Vec<MonitorRule>>,
-    pub email_recipient: Option<String>,
+    pub notification_channel_id: Option<Uuid>,
+    // pub email_recipient: Option<String>,
 }

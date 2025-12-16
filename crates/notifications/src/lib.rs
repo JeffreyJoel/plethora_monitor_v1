@@ -1,4 +1,5 @@
 pub mod email;
+pub mod primitives;
 
 /// A generic payload for any alert
 #[derive(Debug, Clone)]

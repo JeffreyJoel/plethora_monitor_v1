@@ -94,6 +94,10 @@ impl EventMonitor for PollingMonitor {
     }
 }
 
+/// Helper functions
+
+// This function decodes event logs using the provided ABI and returns a formatted string,
+// this is used to send clear notifications
 pub fn get_event_details(log: &Log, abi: &JsonAbi) -> String {
     let topics = log.topics();
     if topics.is_empty() {
