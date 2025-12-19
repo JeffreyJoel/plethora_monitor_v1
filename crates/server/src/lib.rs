@@ -1,3 +1,4 @@
+pub mod channels;
 pub mod middleware;
 pub mod monitors;
 pub mod router;

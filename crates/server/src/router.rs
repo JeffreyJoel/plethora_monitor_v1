@@ -1,5 +1,5 @@
 use crate::state::AppState;
-use crate::{middleware, monitors, users};
+use crate::{channels, middleware, monitors, users};
 use axum::http::{Method, header};
 use axum::{Router, http};
 use std::sync::Arc;
@@ -10,7 +10,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     // group domain routes
     let api_routes = Router::new()
         .nest("/monitors", monitors::routes::routes())
-        .nest("/users", users::routes::routes());
+        .nest("/users", users::routes::routes())
+        .nest("/channels", channels::routes::routes());
 
     let cors = CorsLayer::new()
         .allow_origin(

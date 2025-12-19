@@ -94,4 +94,68 @@ impl ChannelRepository {
             Ok(None)
         }
     }
+
+    pub async fn update_channel(
+        &self,
+        channel_id: Uuid,
+        user_id: Uuid,
+        label: Option<String>,
+        value: Option<String>,
+    ) -> Result<(), sqlx::Error> {
+        // Build dynamic update query based on which fields are provided
+        let mut query = String::from("UPDATE notification_channels SET ");
+        let mut updates = Vec::new();
+        let mut bind_count = 1;
+
+        if label.is_some() {
+            updates.push(format!("label = ${}", bind_count));
+            bind_count += 1;
+        }
+
+        if value.is_some() {
+            updates.push(format!("value = ${}", bind_count));
+            bind_count += 1;
+        }
+
+        if updates.is_empty() {
+            // Nothing to update
+            return Ok(());
+        }
+
+        query.push_str(&updates.join(", "));
+        query.push_str(&format!(
+            " WHERE id = ${} AND user_id = ${}",
+            bind_count,
+            bind_count + 1
+        ));
+
+        let mut q = sqlx::query(&query);
+
+        if let Some(l) = label {
+            q = q.bind(l);
+        }
+        if let Some(v) = value {
+            q = q.bind(v);
+        }
+
+        q = q.bind(channel_id).bind(user_id);
+
+        let result = q.execute(&self.pool).await?;
+
+        if result.rows_affected() == 0 {
+            return Err(sqlx::Error::RowNotFound);
+        }
+
+        Ok(())
+    }
+
+    pub async fn delete_channel(&self, channel_id: Uuid, user_id: Uuid) -> Result<(), sqlx::Error> {
+        sqlx::query("DELETE FROM notification_channels WHERE id = $1 AND user_id = $2")
+            .bind(channel_id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
 }

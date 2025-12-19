@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 monitor = { path = "../monitor" }
 database = { path = "../database" }
+notifications = { path = "../notifications" }
 
 alloy = { workspace = true }
 anyhow = { workspace = true }
