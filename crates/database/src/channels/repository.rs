@@ -1,4 +1,4 @@
-use notifications::primitives::models::{ChannelType, NotificationChannel};
+use notifications::primitives::models::{NotificationChannel, NotificationChannelType};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -56,12 +56,42 @@ impl ChannelRepository {
 
             channels.push(NotificationChannel {
                 id: Some(id),
-                type_: ChannelType::from(type_str),
+                type_: NotificationChannelType::from(type_str),
                 label,
                 value,
             });
         }
 
         Ok(channels)
+    }
+
+    pub async fn get_channel_by_id(
+        &self,
+        channel_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Option<NotificationChannel>, sqlx::Error> {
+        let rec = sqlx::query(
+            "SELECT id, type, label, value FROM notification_channels WHERE id = $1 AND user_id = $2",
+        )
+        .bind(channel_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = rec {
+            let id: Uuid = row.try_get("id")?;
+            let type_str: String = row.try_get("type")?;
+            let label: String = row.try_get("label")?;
+            let value: String = row.try_get("value")?;
+
+            Ok(Some(NotificationChannel {
+                id: Some(id),
+                type_: NotificationChannelType::from(type_str),
+                label,
+                value,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 }

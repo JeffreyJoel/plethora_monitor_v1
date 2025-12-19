@@ -10,3 +10,6 @@ pub use connection::DbPool;
 pub use migrations::run_migrations;
 pub use monitors::repository::MonitorRepository;
 pub use users::repository::UserRepository;
+
+// re-export notification traits
+pub use notifications::ToDestination;

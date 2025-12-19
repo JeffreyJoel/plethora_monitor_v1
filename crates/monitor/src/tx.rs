@@ -1,21 +1,15 @@
-//! # Transactions Monitor
-//! This module provides tools for monitoring transactions.
-//!
-//! It defines the `TransactionMonitor` trait, which allows for the detection of specific
-//! transaction calls to targeted functions on the blockchain. The monitoring process
-//! involves polling the blockchain for new blocks, fetching full transaction data, and
-//! analyzing the `input` field of each transaction to match function selectors.
+//! Transaction monitoring module.
 
 use crate::PollingMonitor;
-use crate::primitives::models::{Condition, MonitorRule};
+use crate::primitives::models::MonitorRule;
 use crate::primitives::utils::format_value;
 use alloy::consensus::Transaction;
 use alloy::dyn_abi::JsonAbiExt;
 use alloy::hex;
 use alloy::json_abi::JsonAbi;
-use alloy::network::AnyRpcTransaction;
+use alloy::network::{AnyRpcTransaction, TransactionResponse};
 use alloy::providers::Provider;
-use alloy::rpc::types::BlockTransactions;
+use alloy::rpc::types::BlockId;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -39,8 +33,8 @@ impl TransactionMonitor for PollingMonitor {
     where
         F: FnMut(AnyRpcTransaction) + Send + 'static,
     {
-        println!(
-            "TxMonitor: Watching transactions for {:?}",
+        tracing::info!(
+            "TxMonitor: Started monitoring transactions for contract {:?}",
             self.contract_address
         );
 
@@ -50,7 +44,7 @@ impl TransactionMonitor for PollingMonitor {
             let latest_block = match self.provider.get_block_number().await {
                 Ok(num) => num,
                 Err(e) => {
-                    eprintln!("Error fetching latest block number: {}", e);
+                    tracing::error!("Error fetching latest block number: {}", e);
                     sleep(Duration::from_secs(2)).await;
                     continue;
                 }
@@ -59,36 +53,64 @@ impl TransactionMonitor for PollingMonitor {
             while current_block < latest_block {
                 let target_block = current_block + 1;
 
-                // We request the block by number to get all the transactio details in that block
                 match self
                     .provider
-                    .get_block_by_number(target_block.into())
-                    .full()
+                    .get_block_receipts(BlockId::Number(target_block.into()))
                     .await
                 {
-                    Ok(Some(block)) => {
-                        // Alloy returns BlockTransactions enum: either Hashes(Vec<B256>) or Full(Vec<Transaction>)
-                        if let BlockTransactions::Full(txs) = &block.transactions {
-                            for tx in txs {
-                                for rule in &rules {
-                                    if rule.tx_match(tx) {
-                                        println!("Match found for rule: {}", rule.name);
-                                        handler(tx.clone());
-                                        break;
+                    Ok(Some(receipts)) => {
+                        for receipt in receipts {
+                            if receipt.to != Some(self.contract_address) {
+                                continue;
+                            }
+
+                            match self
+                                .provider
+                                .get_transaction_by_hash(receipt.transaction_hash)
+                                .await
+                            {
+                                Ok(Some(tx)) => {
+                                    use crate::tx::TxMatcher;
+
+                                    for rule in &rules {
+                                        if rule.tx_match(&tx) {
+                                            tracing::info!(
+                                                "Match found: Rule '{}' triggered by tx {:?}",
+                                                rule.name,
+                                                tx.tx_hash()
+                                            );
+                                            handler(tx);
+                                            break;
+                                        }
                                     }
+                                }
+                                Ok(None) => {
+                                    tracing::warn!(
+                                        "Transaction {:?} not found",
+                                        receipt.transaction_hash
+                                    );
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Error fetching transaction {:?}: {}",
+                                        receipt.transaction_hash,
+                                        e
+                                    );
                                 }
                             }
                         }
                         current_block = target_block;
                     }
                     Ok(None) => {
-                        // The block number exists (latest_block) but the block data isn't available yet.
-                        // This happens due to eventual consistency in nodes. Wait briefly.
                         sleep(Duration::from_millis(500)).await;
                         continue;
                     }
                     Err(e) => {
-                        eprintln!("Error fetching block {}: {}", target_block, e);
+                        tracing::error!(
+                            "Error fetching receipts for block {}: {}",
+                            target_block,
+                            e
+                        );
                         sleep(Duration::from_secs(1)).await;
                     }
                 }
@@ -99,34 +121,19 @@ impl TransactionMonitor for PollingMonitor {
     }
 }
 
-/// Helper functions
-
-// this takes in a list of rules, and for every condition in the rule, we get the function to listen for
-// and then map it to the abi definition
+/// Maps function monitor rules to their corresponding ABI function definitions.
 pub fn map_rules_to_abi(mut rules: Vec<MonitorRule>, abi: &JsonAbi) -> Vec<MonitorRule> {
     for rule in &mut rules {
-        // Find which function this rule targets
-        let target_name = rule.conditions.iter().find_map(|c| {
-            if let Condition::Function(name) = c {
-                Some(name.clone())
-            } else {
-                None
-            }
-        });
-
-        // map it to the first instance of function in the ABI
-        // this is done incase there are multiple instances of the same function in the abi (function overloading)
-        if let Some(name) = target_name {
-            if let Some(func) = abi.function(&name).and_then(|f| f.first()) {
-                rule.abi_function = Some(func.clone());
-            }
+        if let Some(func) = abi.function(&rule.name).and_then(|f| f.first()) {
+            rule.abi_function = Some(func.clone());
+        } else {
+            eprintln!("Warning: Rule '{}' not found in contract ABI", rule.name);
         }
     }
     rules
 }
 
-// This function decodes transaction input data using the provided ABI and returns a formatted string.
-// This is used to send clear notifications about the transaction details.
+/// Decodes transaction input data using the ABI and returns a formatted string for notifications.
 pub fn get_tx_details(tx: &AnyRpcTransaction, abi: &JsonAbi) -> String {
     let input = tx.input();
 
@@ -156,5 +163,74 @@ pub fn get_tx_details(tx: &AnyRpcTransaction, abi: &JsonAbi) -> String {
         }
     } else {
         format!("Unknown Function (Selector: {})", hex::encode(selector))
+    }
+}
+
+/// Trait for matching transactions against rules
+pub trait TxMatcher {
+    fn tx_match(&self, tx: &AnyRpcTransaction) -> bool;
+}
+
+/// Implementation of TxMatcher for MonitorRule
+impl TxMatcher for crate::primitives::models::MonitorRule {
+    fn tx_match(&self, tx: &AnyRpcTransaction) -> bool {
+        use crate::primitives::models::Condition;
+        use crate::primitives::utils::check_argument_condition;
+
+        let func = match &self.abi_function {
+            Some(f) => f,
+            None => return false,
+        };
+
+        let input = tx.input();
+        if input.len() < 4 {
+            return false;
+        }
+
+        if &input[0..4] != func.selector().as_slice() {
+            return false;
+        }
+
+        let decoded = match func.abi_decode_input(&input[4..]) {
+            Ok(d) => d,
+            Err(_) => return false,
+        };
+
+        for condition in &self.conditions {
+            match condition {
+                Condition::From(addr) => {
+                    if tx.from() != *addr {
+                        return false;
+                    }
+                }
+                Condition::To(addr) => {
+                    if tx.to() != Some(*addr) {
+                        return false;
+                    }
+                }
+                Condition::Function(_) => continue,
+                Condition::Argument {
+                    name,
+                    operator,
+                    value,
+                } => {
+                    let arg_index = func.inputs.iter().position(|p| &p.name == name);
+
+                    if let Some(idx) = arg_index {
+                        if let Some(arg_value) = decoded.get(idx) {
+                            if !check_argument_condition(arg_value, operator, value) {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        true
     }
 }

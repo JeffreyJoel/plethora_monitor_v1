@@ -1,10 +1,4 @@
-//! # Transactions Monitor
-//! This module provides tools for monitoring events.
-//!
-//! It defines the `EventMonitor` trait, which enables the detection and handling of specific
-//! events emitted by smart contracts on the blockchain. The monitoring process involves polling
-//! the blockchain for new blocks, filtering logs based on event signatures, and invoking user-defined
-//! handlers for each detected event.
+//! Event monitoring module.
 
 use crate::PollingMonitor;
 use crate::primitives::utils::format_value;
@@ -15,6 +9,11 @@ use alloy::providers::Provider;
 use alloy::rpc::types::{Filter, Log};
 use std::time::Duration;
 use tokio::time::sleep;
+
+/// Trait for matching events against rules
+pub trait EventMatcher {
+    fn event_match(&self, log: &Log) -> bool;
+}
 
 #[allow(async_fn_in_trait)]
 pub trait EventMonitor {
@@ -41,18 +40,15 @@ impl EventMonitor for PollingMonitor {
             self.contract_address
         );
 
-        // this prepares the event topics from the ABI for efficient filtering.
         let mut topics: Vec<B256> = Vec::new();
         for event_name in event_names {
             if let Some(events) = self.contract_abi.events.get(*event_name) {
                 if let Some(event) = events.first() {
-                    // The event selector is a hash of the event signature.
                     topics.push(event.selector());
                 }
             }
         }
 
-        // this initialises the starting block for polling to the current block number.
         let current_block = self.provider.get_block_number().await?;
 
         loop {
@@ -60,7 +56,6 @@ impl EventMonitor for PollingMonitor {
                 Ok(num) => num,
                 Err(e) => {
                     eprintln!("Error fetching block number: {}", e);
-                    // wait before retrying to avoid spamming the node on failure.
                     sleep(Duration::from_secs(2)).await;
                     continue;
                 }
@@ -70,14 +65,12 @@ impl EventMonitor for PollingMonitor {
                 let from_block = current_block + 1;
                 let to_block = latest_block;
 
-                // this builds a filter to query for logs in the specified block range.
                 let filter = Filter::new()
                     .address(self.contract_address)
                     .event_signature(topics.clone())
                     .from_block(from_block)
                     .to_block(to_block);
 
-                // this fetches the logs from the provider.
                 match self.provider.get_logs(&filter).await {
                     Ok(logs) => {
                         for log in logs {
@@ -88,16 +81,12 @@ impl EventMonitor for PollingMonitor {
                 }
             }
 
-            // wait for a short duration before the next poll.
             sleep(Duration::from_secs(2)).await;
         }
     }
 }
 
-/// Helper functions
-
-// This function decodes event logs using the provided ABI and returns a formatted string,
-// this is used to send clear notifications
+/// Decodes event logs using the ABI and returns a formatted string for notifications.
 pub fn get_event_details(log: &Log, abi: &JsonAbi) -> String {
     let topics = log.topics();
     if topics.is_empty() {
@@ -133,5 +122,94 @@ pub fn get_event_details(log: &Log, abi: &JsonAbi) -> String {
         }
     } else {
         format!("Unknown Event (Signature: {})", selector)
+    }
+}
+
+/// Maps event monitor rules to their corresponding ABI event definitions.
+pub fn map_event_rules_to_abi(
+    mut rules: Vec<crate::primitives::models::MonitorRule>,
+    abi: &JsonAbi,
+) -> Vec<crate::primitives::models::MonitorRule> {
+    for rule in &mut rules {
+        if let Some(event) = abi.event(&rule.name).and_then(|e| e.first()) {
+            rule.abi_event = Some(event.clone());
+        } else {
+            eprintln!(
+                "Warning: Event rule '{}' not found in contract ABI",
+                rule.name
+            );
+        }
+    }
+    rules
+}
+
+/// Implementation of EventMatcher for MonitorRule
+impl EventMatcher for crate::primitives::models::MonitorRule {
+    fn event_match(&self, log: &Log) -> bool {
+        use crate::primitives::models::Condition;
+        use crate::primitives::utils::check_argument_condition;
+        use alloy::dyn_abi::EventExt;
+
+        let event_def = match &self.abi_event {
+            Some(e) => e,
+            None => return false,
+        };
+
+        let topics = log.topics();
+        if topics.is_empty() {
+            return false;
+        }
+
+        if topics[0] != event_def.selector() {
+            return false;
+        }
+
+        if self.conditions.is_empty() {
+            return true;
+        }
+
+        let decoded = match event_def.decode_log(&log.data()) {
+            Ok(d) => d,
+            Err(_) => return false,
+        };
+
+        let mut arg_map: std::collections::HashMap<String, &alloy::dyn_abi::DynSolValue> =
+            std::collections::HashMap::new();
+
+        let mut indexed_iter = decoded.indexed.iter();
+        let mut body_iter = decoded.body.iter();
+
+        for input in &event_def.inputs {
+            let val = if input.indexed {
+                indexed_iter.next()
+            } else {
+                body_iter.next()
+            };
+
+            if let Some(v) = val {
+                arg_map.insert(input.name.clone(), v);
+            }
+        }
+
+        for condition in &self.conditions {
+            match condition {
+                Condition::Argument {
+                    name,
+                    operator,
+                    value,
+                } => {
+                    if let Some(arg_value) = arg_map.get(name) {
+                        if !check_argument_condition(arg_value, operator, value) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+                _ => continue,
+            }
+        }
+
+        true
     }
 }

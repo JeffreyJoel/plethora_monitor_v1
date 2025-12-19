@@ -1,14 +1,14 @@
 pub mod events;
-pub mod filter;
 pub mod primitives;
 pub mod tx;
 
-pub use events::EventMonitor;
-pub use tx::TransactionMonitor;
+pub use events::{EventMatcher, EventMonitor};
+use notifications::primitives::models::{Alert, NotificationDestination};
+pub use tx::{TransactionMonitor, TxMatcher};
 
 use crate::primitives::models::MonitorRule;
 use crate::tx::get_tx_details;
-use notifications::{Alert, NotificationDestination, send_notification};
+use notifications::send_notification;
 
 use alloy::json_abi::JsonAbi;
 use alloy::network::{AnyNetwork, TransactionResponse};
@@ -55,24 +55,22 @@ impl PollingMonitor {
     pub fn start_background_monitoring(
         self,
         name: String,
-        tx_rules: Vec<MonitorRule>,
-        event_names: Vec<String>,
-        email_recipient: Option<String>,
+        function_rules: Vec<MonitorRule>,
+        event_rules: Vec<MonitorRule>,
+        destination: Option<NotificationDestination>,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut sub_tasks = vec![];
 
             // Transaction Sub-Task
-            if !tx_rules.is_empty() {
+            if !function_rules.is_empty() {
                 let monitor_tx = self.clone();
                 let n = name.clone();
-                let email_addr = email_recipient.clone();
-
                 let abi = self.contract_abi.clone();
-
+                let dest_for_tx = destination.clone();
                 sub_tasks.push(tokio::spawn(async move {
                     let _ = monitor_tx
-                        .monitor_transactions_polling(tx_rules, move |tx| {
+                        .monitor_transactions_polling(function_rules, move |tx| {
                             println!("[TX ALERT] {}: {:?}", n, tx.tx_hash());
 
                             let details = get_tx_details(&tx, &abi);
@@ -85,16 +83,17 @@ impl PollingMonitor {
                                 details
                             );
 
-                            if let Some(email) = &email_addr {
-                                let destination = NotificationDestination::Email(email.clone());
+                            if let Some(dest) = &dest_for_tx {
                                 let alert = Alert {
                                     source: n.clone(),
                                     subject: "TX ALERT".to_string(),
                                     message: msg,
                                 };
 
+                                let dest_clone = dest.clone();
+
                                 tokio::spawn(async move {
-                                    let _ = send_notification(&destination, &alert).await;
+                                    let _ = send_notification(&dest_clone, &alert).await;
                                 });
                             }
                         })
@@ -102,40 +101,49 @@ impl PollingMonitor {
                 }));
             }
 
-            // Event Sub-Task
-            if !event_names.is_empty() {
+            // Event Sub-Task (supports conditional event rules)
+            if !event_rules.is_empty() {
                 let monitor_events = self.clone();
                 let n = name.clone();
-                let email_addr = email_recipient.clone();
-                let events_ref: Vec<String> = event_names.clone();
-
                 let abi = self.contract_abi.clone();
+                let dest_for_events = destination.clone();
+                let event_rules_ref: Vec<MonitorRule> = event_rules.clone();
+
+                // Build event name list for the poller
+                let event_names: Vec<String> =
+                    event_rules_ref.iter().map(|r| r.name.clone()).collect();
 
                 sub_tasks.push(tokio::spawn(async move {
                     // convert String -> &str for the trait
-                    let refs: Vec<&str> = events_ref.iter().map(|s| s.as_str()).collect();
+                    let refs: Vec<&str> = event_names.iter().map(|s| s.as_str()).collect();
+
                     let _ = monitor_events
                         .monitor_events_polling(&refs, move |log| {
-                            println!("[EVENT ALERT] {}: Block {:?}", n, log.block_number);
+                            // Check each rule to see if it matches
+                            for rule in &event_rules_ref {
+                                if rule.event_match(&log) {
+                                    println!("[EVENT ALERT] {}: Block {:?}", n, log.block_number);
+                                    let event_details = events::get_event_details(&log, &abi);
+                                    let msg = format!(
+                                        "Event Alert: {}\nBlock: {:?}\n{}",
+                                        n, log.block_number, event_details
+                                    );
 
-                            let event_details = events::get_event_details(&log, &abi);
+                                    if let Some(dest) = &dest_for_events {
+                                        let alert = Alert {
+                                            source: n.clone(),
+                                            subject: "Event ALERT".to_string(),
+                                            message: msg,
+                                        };
 
-                            let msg = format!(
-                                "Event Alert: {}\nBlock: {:?}\n{}",
-                                n, log.block_number, event_details
-                            );
+                                        let dest_clone = dest.clone();
 
-                            if let Some(email) = &email_addr {
-                                let destination = NotificationDestination::Email(email.clone());
-                                let alert = Alert {
-                                    source: n.clone(),
-                                    subject: "Event ALERT".to_string(),
-                                    message: msg,
-                                };
-
-                                tokio::spawn(async move {
-                                    let _ = send_notification(&destination, &alert).await;
-                                });
+                                        tokio::spawn(async move {
+                                            let _ = send_notification(&dest_clone, &alert).await;
+                                        });
+                                    }
+                                    break; // Only notify once per log
+                                }
                             }
                         })
                         .await;

@@ -61,3 +61,85 @@ pub fn format_value(val: &DynSolValue) -> String {
         _ => format!("{:?}", val),
     }
 }
+
+/// Check if an argument value satisfies a condition with an operator
+pub fn check_argument_condition(
+    arg_value: &alloy::dyn_abi::DynSolValue,
+    operator: &crate::primitives::models::Operator,
+    expected_value: &str,
+) -> bool {
+    use crate::primitives::models::Operator;
+    use alloy::dyn_abi::DynSolValue;
+    use alloy::primitives::Address;
+    use std::str::FromStr;
+
+    match arg_value {
+        DynSolValue::Address(addr) => match operator {
+            Operator::Eq => {
+                if let Ok(expected_addr) = Address::from_str(expected_value) {
+                    return addr == &expected_addr;
+                }
+                false
+            }
+            Operator::Contains => addr
+                .to_string()
+                .to_lowercase()
+                .contains(&expected_value.to_lowercase()),
+            _ => false,
+        },
+        DynSolValue::Uint(val, _) => {
+            let val_str = val.to_string();
+            match operator {
+                Operator::Eq => val_str == expected_value,
+                Operator::Gt => val_str
+                    .parse::<u128>()
+                    .ok()
+                    .and_then(|l| expected_value.parse::<u128>().ok().map(|r| l > r))
+                    .unwrap_or(false),
+                Operator::Lt => val_str
+                    .parse::<u128>()
+                    .ok()
+                    .and_then(|l| expected_value.parse::<u128>().ok().map(|r| l < r))
+                    .unwrap_or(false),
+                _ => false,
+            }
+        }
+        DynSolValue::Int(val, _) => {
+            let val_str = val.to_string();
+            match operator {
+                Operator::Eq => val_str == expected_value,
+                Operator::Gt => val_str
+                    .parse::<i128>()
+                    .ok()
+                    .and_then(|l| expected_value.parse::<i128>().ok().map(|r| l > r))
+                    .unwrap_or(false),
+                Operator::Lt => val_str
+                    .parse::<i128>()
+                    .ok()
+                    .and_then(|l| expected_value.parse::<i128>().ok().map(|r| l < r))
+                    .unwrap_or(false),
+                _ => false,
+            }
+        }
+        DynSolValue::String(s) => match operator {
+            Operator::Eq => s == expected_value,
+            Operator::Contains => s.contains(expected_value),
+            Operator::Gt => s
+                .parse::<u128>()
+                .ok()
+                .and_then(|l| expected_value.parse::<u128>().ok().map(|r| l > r))
+                .unwrap_or(false),
+            Operator::Lt => s
+                .parse::<u128>()
+                .ok()
+                .and_then(|l| expected_value.parse::<u128>().ok().map(|r| l < r))
+                .unwrap_or(false),
+        },
+        DynSolValue::Bool(b) => match expected_value.to_lowercase().as_str() {
+            "true" => *b,
+            "false" => !*b,
+            _ => false,
+        },
+        _ => false,
+    }
+}

@@ -5,7 +5,8 @@ use axum::{
     http::StatusCode,
 };
 use clerk_rs::validators::authorizer::ClerkJwt;
-use database::{MonitorRepository, UserRepository};
+use database::{MonitorRepository, ToDestination, UserRepository};
+use monitor::events::map_event_rules_to_abi;
 use monitor::primitives::utils::fetch_abi;
 use monitor::tx::map_rules_to_abi;
 use monitor::{PollingMonitor, primitives::models::MonitorConfig};
@@ -18,14 +19,12 @@ pub async fn create_monitor(
     Extension(jwt): Extension<ClerkJwt>,
     Json(payload): Json<MonitorConfig>,
 ) -> Result<Json<CreateMonitorResponse>, StatusCode> {
-    //ensure that the user exists in our local DB before creating a resource for them.
     let user_repo = UserRepository::new(state.db.pool.clone());
     let user_uuid = user_repo.get_or_create(&jwt.sub, None).await.map_err(|e| {
         tracing::error!("DB User Error: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    // save Monitor Configuration to DB
     let monitor_repo = MonitorRepository::new(state.db.pool.clone());
     let monitor_id = monitor_repo
         .create(user_uuid, &payload)
@@ -37,7 +36,6 @@ pub async fn create_monitor(
 
     let monitor_id_str = monitor_id.to_string();
 
-    // start background Monitoring Task
     let rpc_url = if payload.rpc_url.is_empty() {
         state.default_rpc_url.clone()
     } else {
@@ -51,20 +49,40 @@ pub async fn create_monitor(
         .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    let tx_rules = map_rules_to_abi(payload.functions.unwrap_or_default(), &abi);
-    let event_names = payload.events.unwrap_or_default();
+    let function_rules = map_rules_to_abi(payload.function_rules.unwrap_or_default(), &abi);
+    let event_rules = map_event_rules_to_abi(payload.event_rules.unwrap_or_default(), &abi);
+
+    let notification_destination = if let Some(channel_id) = payload.notification_channel_id {
+        match state
+            .db
+            .channels
+            .get_channel_by_id(channel_id, user_uuid)
+            .await
+        {
+            Ok(Some(channel)) => channel.to_destination(),
+            Ok(None) => {
+                tracing::warn!("Notification channel {} not found", channel_id);
+                None
+            }
+            Err(e) => {
+                tracing::error!("Failed to fetch notification channel: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     let monitor_engine = PollingMonitor::new(&rpc_url, payload.address, abi)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let handle = monitor_engine.start_background_monitoring(
         payload.name,
-        tx_rules,
-        event_names,
-        payload.notification_channel_id.map(|id| id.to_string()),
+        function_rules,
+        event_rules,
+        notification_destination,
     );
 
-    // register task in memory
     state
         .active_monitors
         .write()
@@ -125,33 +143,51 @@ pub async fn update_monitor(
             }
         })?;
 
-    // STOP existing task
     {
         let mut monitors = state.active_monitors.write().await;
         if let Some(handle) = monitors.remove(&monitor_id.to_string()) {
-            handle.abort(); // Kill the old loop
+            handle.abort();
             println!("Stopped monitor task: {}", monitor_id);
         }
     }
 
-    //START new task
     let rpc_url = if payload.rpc_url.is_empty() {
         state.default_rpc_url.clone()
     } else {
         payload.rpc_url.clone()
     };
 
-    // TODO: add proper error handling
     if let Ok(abi) = fetch_abi(&payload.chain, payload.address, &rpc_url).await {
-        let tx_rules = map_rules_to_abi(payload.functions.unwrap_or_default(), &abi);
-        let event_names = payload.events.unwrap_or_default();
+        let function_rules = map_rules_to_abi(payload.function_rules.unwrap_or_default(), &abi);
+        let event_rules = map_event_rules_to_abi(payload.event_rules.unwrap_or_default(), &abi);
+
+        let notification_destination = if let Some(channel_id) = payload.notification_channel_id {
+            match state
+                .db
+                .channels
+                .get_channel_by_id(channel_id, user_id)
+                .await
+            {
+                Ok(Some(channel)) => channel.to_destination(),
+                Ok(None) => {
+                    tracing::warn!("Notification channel {} not found", channel_id);
+                    None
+                }
+                Err(e) => {
+                    tracing::error!("Failed to fetch notification channel: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         if let Ok(engine) = PollingMonitor::new(&rpc_url, payload.address, abi) {
             let new_handle = engine.start_background_monitoring(
                 payload.name,
-                tx_rules,
-                event_names,
-                payload.notification_channel_id.map(|id| id.to_string()),
+                function_rules,
+                event_rules,
+                notification_destination,
             );
 
             state
@@ -180,7 +216,6 @@ pub async fn delete_monitor(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // delete from DB
     let monitor_repo = MonitorRepository::new(state.db.pool.clone());
     monitor_repo
         .delete(monitor_id, user_id)
@@ -193,7 +228,6 @@ pub async fn delete_monitor(
             }
         })?;
 
-    // stop task
     {
         let mut monitors = state.active_monitors.write().await;
         if let Some(handle) = monitors.remove(&monitor_id.to_string()) {
