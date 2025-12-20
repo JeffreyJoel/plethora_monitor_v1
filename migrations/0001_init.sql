@@ -2,14 +2,12 @@ CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     clerk_id VARCHAR(255) UNIQUE NOT NULL,
 
-    -- Add the extra details you want here
     email VARCHAR(255),
     first_name VARCHAR(100),
 
     created_at TIMESTAMP DEFAULT current_timestamp()
 );
 
--- (Your monitors table remains the same)
 CREATE TABLE IF NOT EXISTS monitors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id),
@@ -18,3 +16,14 @@ CREATE TABLE IF NOT EXISTS monitors (
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT current_timestamp()
 );
+
+CREATE TABLE IF NOT EXISTS notification_channels (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    label VARCHAR(255) NOT NULL,
+    value TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT current_timestamp()
+);
+
+CREATE INDEX idx_notification_channels_user_id ON notification_channels(user_id);

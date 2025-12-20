@@ -11,6 +11,16 @@ use notifications::primitives::models::{NotificationChannel, NotificationChannel
 use std::sync::Arc;
 use uuid::Uuid;
 
+#[utoipa::path(
+    post,
+    path = "/api/channels",
+    request_body = CreateChannelRequest,
+    responses(
+        (status = 200, description = "Channel created successfully", body = ChannelResponse),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "channels"
+)]
 pub async fn create_channel(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
@@ -49,6 +59,15 @@ pub async fn create_channel(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/channels",
+    responses(
+        (status = 200, description = "List of channels", body = Vec<ChannelResponse>),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "channels"
+)]
 pub async fn get_channels(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
@@ -82,6 +101,19 @@ pub async fn get_channels(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/channels/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Channel ID")
+    ),
+    responses(
+        (status = 200, description = "Channel details", body = ChannelResponse),
+        (status = 404, description = "Channel not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "channels"
+)]
 pub async fn get_channel(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
@@ -111,6 +143,20 @@ pub async fn get_channel(
     }
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/channels/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Channel ID")
+    ),
+    request_body = UpdateChannelRequest,
+    responses(
+        (status = 200, description = "Channel updated successfully", body = ChannelResponse),
+        (status = 404, description = "Channel not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "channels"
+)]
 pub async fn update_channel(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
@@ -171,6 +217,19 @@ pub async fn update_channel(
     }))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/channels/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Channel ID")
+    ),
+    responses(
+        (status = 204, description = "Channel deleted successfully"),
+        (status = 404, description = "Channel not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "channels"
+)]
 pub async fn delete_channel(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,

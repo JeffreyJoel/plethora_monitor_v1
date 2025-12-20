@@ -14,6 +14,17 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 // POST /api/monitors
+#[utoipa::path(
+    post,
+    path = "/api/monitors",
+    request_body = MonitorConfig,
+    responses(
+        (status = 200, description = "Monitor created successfully", body = CreateMonitorResponse),
+        (status = 400, description = "Bad Request"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "monitors"
+)]
 pub async fn create_monitor(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
@@ -96,6 +107,19 @@ pub async fn create_monitor(
 }
 
 // GET /api/monitors/:id
+#[utoipa::path(
+    get,
+    path = "/api/monitors/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Monitor ID")
+    ),
+    responses(
+        (status = 200, description = "Monitor configuration", body = MonitorConfig),
+        (status = 404, description = "Monitor not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "monitors"
+)]
 pub async fn get_monitor(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
@@ -117,6 +141,20 @@ pub async fn get_monitor(
 }
 
 // PUT /api/monitors/:id
+#[utoipa::path(
+    put,
+    path = "/api/monitors/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Monitor ID")
+    ),
+    request_body = MonitorConfig,
+    responses(
+        (status = 200, description = "Monitor updated successfully", body = serde_json::Value),
+        (status = 404, description = "Monitor not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "monitors"
+)]
 pub async fn update_monitor(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
@@ -205,6 +243,19 @@ pub async fn update_monitor(
 }
 
 // DELETE /api/monitors/:id
+#[utoipa::path(
+    delete,
+    path = "/api/monitors/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Monitor ID")
+    ),
+    responses(
+        (status = 204, description = "Monitor deleted successfully"),
+        (status = 404, description = "Monitor not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "monitors"
+)]
 pub async fn delete_monitor(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,

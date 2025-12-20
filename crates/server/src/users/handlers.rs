@@ -12,6 +12,16 @@ use database::UserRepository;
 use std::sync::Arc;
 
 // POST /api/users/register
+#[utoipa::path(
+    post,
+    path = "/api/users/register",
+    request_body = RegisterUserRequest,
+    responses(
+        (status = 200, description = "User registered successfully", body = UserRegisteredResponse),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "users"
+)]
 pub async fn register_user(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
@@ -37,6 +47,17 @@ pub async fn register_user(
 }
 
 // PATCH /api/users/profile
+#[utoipa::path(
+    patch,
+    path = "/api/users/profile",
+    request_body = UpdateUserRequest,
+    responses(
+        (status = 200, description = "Profile updated successfully", body = UserRegisteredResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "users"
+)]
 pub async fn update_profile(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
@@ -72,7 +93,17 @@ pub async fn update_profile(
     }))
 }
 
-// PATCH /api/users/me
+// GET /api/users/me
+#[utoipa::path(
+    get,
+    path = "/api/users/me",
+    responses(
+        (status = 200, description = "User details", body = UserDetailsResponse),
+        (status = 404, description = "User not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "users"
+)]
 pub async fn get_me(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
