@@ -5,102 +5,99 @@
 Plethora Monitor is a high-performance, dynamic EVM blockchain monitoring agent written in Rust. It is designed to track smart contract events and transactions in real-time, allowing users to spawn, manage, and supervise monitoring tasks dynamically via a REST API.
 
 ## Architecture Overview
-   
-   1.  **`crates/server` (The Brain)**:
-   
-         - Exposes the REST API using `axum`.
-         - Manages Global State (`AppState`) via `RwLock` to track active monitor handles.
-         - Handles **Rule Hydration**: Fetches ABIs from Etherscan/Block Explorers to convert human-readable config (e.g., `"transfer"`) into machine-executable logic (Selectors & Decoders).
-         - Implements endpoints to create, update, and delete monitors dynamically.
-         - Maps users to monitors for better organization and access control.
-   
-   2.  **`crates/monitor` (The Muscle)**:
-   
-         - **`PollingMonitor`**: The core engine that maintains the RPC connection.
-         - **`TransactionMonitor`**: Scans blocks for transactions matching specific rules.
-         - **`EventMonitor`**: Scans logs for specific event signatures.
-         - **`primitives/models.rs`**: Defines the shared DTOs (`MonitorRule`, `Condition`) used by both the config and the logic engine.
-         - Implements HTTP POST webhooks to notify users when a rule matches.
 
-3.  **`crates/server` (The API layer)**:
-   
-         - Manages the REST API endpoints for creating, updating, and deleting monitors.
-         - Handles user authentication and mapping users to their respective monitors.
-         - Maintains the global application state (`AppState`) to track active monitors and their configurations.
-         - Implements graceful shutdown and state cleanup to ensure reliability.
+1.  **`crates/server` (The Brain)**:
+    - Exposes the REST API using `axum`.
+    - Manages Global State (`AppState`).
+    - Integrates with **Clerk** for authentication.
+    - Handles **Rule Hydration**: Fetches ABIs from Etherscan/Block Explorers to convert human-readable config into machine-executable logic.
+    - **Swagger UI**: Provides interactive API documentation at `/swagger-ui`.
+
+2.  **`crates/monitor` (The Muscle)**:
+    - **`PollingMonitor`**: The core engine that maintains RPC connections.
+    - **`TransactionMonitor`**: Scans blocks for transactions matching specific rules.
+    - **`EventMonitor`**: Scans logs for specific event signatures.
+    - Defines shared DTOs (`MonitorConfig`, `MonitorRule`) used by the system.
+
+3.  **`crates/database` (The Memory)**:
+    - Handles persistence using **CockroachDB** and **SQLx**.
+    - Stores Users, Monitors, and Notification Channels.
+    - Manages migrations and connection pooling.
 
 4.  **`crates/notifications` (The Messenger)**:
-   
-         - Handles all notification-related functionality, including sending email alerts and webhooks.
-         - Supports HTTP POST callbacks to notify users when a rule matches.
-         - Provides extensibility for adding new notification channels (e.g., SMS, Slack, etc.).
-         - Ensures reliable delivery of notifications with retry mechanisms for transient failures.
+    - Handles notification delivery (Email, Webhooks, etc.).
+    - Abstracted via `ToDestination` trait.
+    - Manages different channel types (e.g., Email, Webhook).
 
+## Features & Status
 
-
-
-## To-Do List
-
-### Completed
-- [x] Workspace Setup: Modular crate structure (bin, crates/monitor, crates/server, crates/config).
-- [x] Core Engine: Implemented PollingMonitor with resilient loop logic.
-- [x] Rule Engine: Developed filter.rs for dynamic ABI decoding and argument comparison.
-- [x] Monitor Endpoints: Implemented logic and exposed endpoints to create monitors.
-- [x] Notification: Implemented email notification to alert the user when conditions have been met
-
-### Remaining
-  - [ ] **Persistence**: Finalize saving `active_monitors` state to database.
-  - [ ] **User Endpoints**: Implemented user logic and mapped users to monitors.
-  - [ ] **Metrics**: Add Prometheus metrics for blocks processed and latency.
-  - [ ] **Tests**: Write unit tests for the Rule Engine decoding logic.
+- [x] **Workspace Setup**: Modular crate structure.
+- [x] **Core Engine**: Resilient polling and event detection.
+- [x] **Rule Engine**: Dynamic ABI decoding and argument filtering.
+- [x] **API & Docs**: REST API with Swagger UI/OpenAPI support.
+- [x] **Authentication**: User management via Clerk integration.
+- [x] **Persistence**: CockroachDB storage for monitors and user data.
+- [x] **Notifications**: Flexible notification channels (Email, Webhook).
+- [ ] **Metrics**: Prometheus metrics for monitoring performance.
+- [ ] **Tests**: Comprehensive unit and integration tests.
 
 ## Getting Started
-   
-   ### Prerequisites
-   
-     - Rust (edition 2024)
-     - Cargo
-     - An Etherscan/Basescan API Key (for ABI fetching)
-   
-   ### Installation
-   
-   1.  Clone the repository:
-       ```bash
-       git clone <repository-url>
-       cd plethora_monitor
-       ```
-   2.  Set up your environment:
-       ```bash
-       cp .env.example .env
-       # Add your ETHERSCAN_API_KEY and BREVO_API_KEY in .env
-       ```
-   3.  Run the project:
-       ```bash
-       cargo run --bin plethora_monitor
-       ```
 
-## Example: Test Monitor Request
+### Prerequisites
+- Rust (edition 2024)
+- PostgreSQL Database
+- An Etherscan/Basescan API Key (for ABI fetching)
+- Clerk API Keys (for Auth)
 
-Send a POST request to /monitors to spawn a new monitor.
+### Installation
+
+1.  Clone the repository:
+    ```bash
+    git clone <repository-url>
+    cd plethora_monitor
+    ```
+
+2.  Set up your environment:
+    ```bash
+    cp .env.example .env
+    # Configure DB_URL, ETHERSCAN_API_KEY, CLERK_SECRET_KEY, etc.
+    ```
+
+3.  Run migrations:
+    ```bash
+    sqlx migrate run
+    ```
+
+4.  Run the server:
+    ```bash
+    cargo run --bin plethora_monitor
+    ```
+
+## API Documentation
+
+Once the server is running, visit:
+- **Swagger UI**: `http://localhost:4000/swagger-ui`
+- **OpenAPI Spec**: `http://localhost:4000/api-docs/openapi.json`
+
+## Example: Create Monitor
+
+Send a `POST` request to `/api/monitors` (requires Auth Bearer Token).
 
 ```json
 {
   "name": "USDC Whale Watcher",
   "chain": "base-sepolia",
   "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  "rpc_url": "https://sepolia.base.org", 
-  "email_recipient": "<YOUR_EMAIL>@gmail.com",
-  "functions": [
+  "rpc_url": "https://sepolia.base.org",
+  "notification_channel_id": "550e8400-e29b-41d4-a716-446655440000",
+  "function_rules": [
     {
       "name": "Large Transfer Alert",
       "conditions": [
-        {
-          "Function": "transfer"
-        },
-        {
-          "From": "<YOUR_ADDRESS>"
-        }
+        { "Function": "transfer" },
+        { "From": "0xYourWalletAddress" }
       ]
     }
   ]
 }
+```
