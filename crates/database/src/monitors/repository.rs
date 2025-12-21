@@ -30,9 +30,9 @@ impl MonitorRepository {
     }
 
     // gets all active monitors for a specific user
-    pub async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<MonitorConfig>, sqlx::Error> {
+    pub async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<(Uuid, MonitorConfig)>, sqlx::Error> {
         let recs = sqlx::query(
-            "SELECT configuration FROM monitors WHERE user_id = $1 AND is_active = true",
+            "SELECT id, configuration FROM monitors WHERE user_id = $1 AND is_active = true",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -40,9 +40,10 @@ impl MonitorRepository {
 
         let mut monitors = Vec::new();
         for row in recs {
+            let id: Uuid = row.try_get("id")?;
             let cfg_json: serde_json::Value = row.try_get("configuration")?;
             if let Ok(cfg) = serde_json::from_value(cfg_json) {
-                monitors.push(cfg);
+                monitors.push((id, cfg));
             }
         }
 

@@ -1,4 +1,7 @@
-use crate::{monitors::models::CreateMonitorResponse, state::AppState};
+use crate::{
+    monitors::models::{CreateMonitorResponse, MonitorResponse},
+    state::AppState,
+};
 use axum::{
     Json,
     extract::{Extension, Path, State},
@@ -104,6 +107,41 @@ pub async fn create_monitor(
         id: monitor_id_str,
         status: "Running".to_string(),
     }))
+}
+
+// GET /api/monitors
+#[utoipa::path(
+    get,
+    path = "/api/monitors",
+    responses(
+        (status = 200, description = "List of monitors", body = Vec<MonitorResponse>),
+        (status = 500, description = "Internal Server Error")
+    ),
+    tag = "monitors"
+)]
+pub async fn get_monitors(
+    State(state): State<Arc<AppState>>,
+    Extension(jwt): Extension<ClerkJwt>,
+) -> Result<Json<Vec<MonitorResponse>>, StatusCode> {
+    let user_repo = UserRepository::new(state.db.pool.clone());
+    let user_id = user_repo
+        .get_or_create(&jwt.sub, None)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let monitor_repo = MonitorRepository::new(state.db.pool.clone());
+
+    let monitors = monitor_repo
+        .get_by_user(user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let response = monitors
+        .into_iter()
+        .map(|(id, config)| MonitorResponse { id, config })
+        .collect();
+
+    Ok(Json(response))
 }
 
 // GET /api/monitors/:id

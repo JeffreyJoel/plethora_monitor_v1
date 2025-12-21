@@ -1,6 +1,7 @@
 use utoipa::OpenApi;
 use crate::{monitors, users, channels};
 use crate::monitors::models::CreateMonitorResponse;
+use crate::monitors::models::MonitorResponse;
 use crate::users::models::{RegisterUserRequest, UpdateUserRequest, UserDetailsResponse, UserRegisteredResponse};
 use crate::channels::models::{CreateChannelRequest, ChannelResponse, UpdateChannelRequest};
 use monitor::primitives::models::{MonitorConfig, MonitorRule, Condition, Operator};
@@ -9,6 +10,7 @@ use monitor::primitives::models::{MonitorConfig, MonitorRule, Condition, Operato
 #[openapi(
     paths(
         monitors::handlers::create_monitor,
+        monitors::handlers::get_monitors,
         monitors::handlers::get_monitor,
         monitors::handlers::update_monitor,
         monitors::handlers::delete_monitor,
@@ -28,6 +30,7 @@ use monitor::primitives::models::{MonitorConfig, MonitorRule, Condition, Operato
             Condition,
             Operator,
             CreateMonitorResponse,
+            MonitorResponse,
             RegisterUserRequest,
             UpdateUserRequest,
             UserDetailsResponse,
