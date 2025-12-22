@@ -50,6 +50,28 @@ impl MonitorRepository {
         Ok(monitors)
     }
 
+    // gets all active monitors across all users (for startup restoration)
+    pub async fn get_all_active(&self) -> Result<Vec<(Uuid, Uuid, MonitorConfig)>, sqlx::Error> {
+        let recs = sqlx::query(
+            "SELECT id, user_id, configuration FROM monitors WHERE is_active = true",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut monitors = Vec::new();
+        for row in recs {
+            let id: Uuid = row.try_get("id")?;
+            let user_id: Uuid = row.try_get("user_id")?;
+            let cfg_json: serde_json::Value = row.try_get("configuration")?;
+            if let Ok(cfg) = serde_json::from_value(cfg_json) {
+                monitors.push((id, user_id, cfg));
+            }
+        }
+
+        Ok(monitors)
+    }
+
+
     // gets a single monitor (Security: Must match user_id)
     pub async fn get_by_id(
         &self,

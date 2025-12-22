@@ -14,9 +14,116 @@ use monitor::primitives::utils::fetch_abi;
 use monitor::tx::map_rules_to_abi;
 use monitor::{PollingMonitor, primitives::models::MonitorConfig};
 use std::sync::Arc;
+use tracing::{error, warn, info};
 use uuid::Uuid;
 
+/// Restores all active monitors from the database on server startup
+pub async fn restore_monitors(state: Arc<AppState>) {
+    let monitor_repo = MonitorRepository::new(state.db.pool.clone());
+    
+    let monitors = match monitor_repo.get_all_active().await {
+        Ok(m) => m,
+        Err(e) => {
+            error!("Failed to fetch active monitors for restoration: {}", e);
+            return;
+        }
+    };
+
+    if monitors.is_empty() {
+        info!("No active monitors to restore");
+        return;
+    }
+
+    info!("Restoring {} active monitor(s) from database...", monitors.len());
+
+    let mut restored_count = 0;
+    let mut failed_count = 0;
+
+    for (monitor_id, user_id, config) in monitors {
+        let monitor_id_str = monitor_id.to_string();
+
+        let rpc_url = if config.rpc_url.is_empty() {
+            state.default_rpc_url.clone()
+        } else {
+            config.rpc_url.clone()
+        };
+
+        // Fetch ABI - if this fails, skip the monitor
+        let abi = match fetch_abi(&config.chain, config.address, &rpc_url).await {
+            Ok(abi) => abi,
+            Err(e) => {
+                warn!(
+                    "Failed to fetch ABI for monitor {} ({}): {}. Skipping restoration.",
+                    monitor_id, config.name, e
+                );
+                failed_count += 1;
+                continue;
+            }
+        };
+
+        let function_rules = map_rules_to_abi(config.function_rules.clone().unwrap_or_default(), &abi);
+        let event_rules = map_event_rules_to_abi(config.event_rules.clone().unwrap_or_default(), &abi);
+
+        // Fetch notification channel if configured
+        let notification_destination = if let Some(channel_id) = config.notification_channel_id {
+            match state.db.channels.get_channel_by_id(channel_id, user_id).await {
+                Ok(Some(channel)) => channel.to_destination(),
+                Ok(None) => {
+                    warn!(
+                        "Notification channel {} not found for monitor {}. Continuing without notifications.",
+                        channel_id, monitor_id
+                    );
+                    None
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to fetch notification channel {} for monitor {}: {}. Continuing without notifications.",
+                        channel_id, monitor_id, e
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Create and start the monitor
+        match PollingMonitor::new(&rpc_url, config.address, abi) {
+            Ok(monitor_engine) => {
+                let handle = monitor_engine.start_background_monitoring(
+                    config.name.clone(),
+                    function_rules,
+                    event_rules,
+                    notification_destination,
+                );
+
+                state
+                    .active_monitors
+                    .write()
+                    .await
+                    .insert(monitor_id_str, handle);
+
+                info!("✓ Restored monitor: {} ({})", config.name, monitor_id);
+                restored_count += 1;
+            }
+            Err(e) => {
+                error!(
+                    "Failed to create monitor engine for {} ({}): {}. Skipping.",
+                    config.name, monitor_id, e
+                );
+                failed_count += 1;
+            }
+        }
+    }
+
+    info!(
+        "Monitor restoration complete: {} restored, {} failed",
+        restored_count, failed_count
+    );
+}
+
 // POST /api/monitors
+
 #[utoipa::path(
     post,
     path = "/api/monitors",
