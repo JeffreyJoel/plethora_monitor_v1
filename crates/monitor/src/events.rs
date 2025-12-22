@@ -42,14 +42,21 @@ impl EventMonitor for PollingMonitor {
 
         let mut topics: Vec<B256> = Vec::new();
         for event_name in event_names {
+            // find the event by name (e.g. "Transfer")
             if let Some(events) = self.contract_abi.events.get(*event_name) {
                 if let Some(event) = events.first() {
                     topics.push(event.selector());
                 }
+            } else {
+                eprintln!("Warning: Event '{}' not found in ABI", event_name);
             }
         }
 
-        let current_block = self.provider.get_block_number().await?;
+        if topics.is_empty() {
+             eprintln!("EventsMonitor: No valid event topics found. Monitor will not catch anything.");
+        }
+
+        let mut current_block = self.provider.get_block_number().await?;
 
         loop {
             let latest_block = match self.provider.get_block_number().await {
@@ -79,6 +86,8 @@ impl EventMonitor for PollingMonitor {
                     }
                     Err(e) => eprintln!("Error fetching logs: {}", e),
                 }
+
+                current_block = latest_block;
             }
 
             sleep(Duration::from_secs(2)).await;
@@ -213,3 +222,4 @@ impl EventMatcher for crate::primitives::models::MonitorRule {
         true
     }
 }
+
