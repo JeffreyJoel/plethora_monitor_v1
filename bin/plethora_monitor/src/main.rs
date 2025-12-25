@@ -36,8 +36,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let app = create_router(shared_state);
 
     // start server
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:4000").await?;
-    println!("Server running on http://0.0.0.0:4000");
+    let port = env::var("PORT").unwrap_or_else(|_| "4000".to_string());
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
+
+    println!("Server running on http://0.0.0.0:{}", port);
 
     axum::serve(listener, app).await?;
 

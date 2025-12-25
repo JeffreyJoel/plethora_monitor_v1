@@ -35,7 +35,9 @@ jobs:
       run: mkdir app
     # put the app in it
     - name: copy
-      run: mv ./target/release/axum-deom ./app/axum
+      run: mv ./target/release/plethora_monitor ./app/axum
+    - name: set executable permission
+      run: chmod +x ./app/axum
 
 
     # heroku deployment
