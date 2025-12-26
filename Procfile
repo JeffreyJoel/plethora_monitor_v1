@@ -1,1 +1,1 @@
-web: ./axum
+web: ./target/release/plethora_monitor
