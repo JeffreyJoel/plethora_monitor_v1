@@ -412,6 +412,16 @@ pub async fn delete_monitor(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Remove monitor from hashmap first
+    {
+        let mut monitors = state.active_monitors.write().await;
+        if let Some(handle) = monitors.remove(&monitor_id.to_string()) {
+            handle.abort();
+            println!("Stopped monitor task: {}", monitor_id);
+        }
+    }
+
+    // Then delete from database
     let monitor_repo = MonitorRepository::new(state.db.pool.clone());
     monitor_repo
         .delete(monitor_id, user_id)
@@ -423,14 +433,6 @@ pub async fn delete_monitor(
                 StatusCode::INTERNAL_SERVER_ERROR
             }
         })?;
-
-    {
-        let mut monitors = state.active_monitors.write().await;
-        if let Some(handle) = monitors.remove(&monitor_id.to_string()) {
-            handle.abort();
-            println!("Deleted monitor task: {}", monitor_id);
-        }
-    }
 
     Ok(StatusCode::NO_CONTENT)
 }
