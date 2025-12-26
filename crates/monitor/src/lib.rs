@@ -16,7 +16,7 @@ use alloy::primitives::Address;
 use alloy::providers::{ProviderBuilder, RootProvider};
 use serde::{Deserialize, Serialize};
 
-use futures::future::join_all;
+use futures::future::{BoxFuture, FutureExt, join_all};
 use tokio::task::JoinHandle;
 
 pub type HttpProvider = RootProvider<AnyNetwork>;
@@ -60,7 +60,7 @@ impl PollingMonitor {
         destination: Option<NotificationDestination>,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
-            let mut sub_tasks = vec![];
+            let mut sub_tasks: Vec<BoxFuture<'static, ()>> = vec![];
 
             // Transaction Sub-Task
             if !function_rules.is_empty() {
@@ -68,7 +68,7 @@ impl PollingMonitor {
                 let n = name.clone();
                 let abi = self.contract_abi.clone();
                 let dest_for_tx = destination.clone();
-                sub_tasks.push(tokio::spawn(async move {
+                let tx_future = async move {
                     let _ = monitor_tx
                         .monitor_transactions_polling(function_rules, move |tx| {
                             println!("[TX ALERT] {}: {:?}", n, tx.tx_hash());
@@ -98,8 +98,10 @@ impl PollingMonitor {
                             }
                         })
                         .await;
-                }));
-            }
+                }
+                .boxed();
+                sub_tasks.push(tx_future);
+            };
 
             // Event Sub-Task (supports conditional event rules)
             if !event_rules.is_empty() {
@@ -113,7 +115,7 @@ impl PollingMonitor {
                 let event_names: Vec<String> =
                     event_rules_ref.iter().map(|r| r.name.clone()).collect();
 
-                sub_tasks.push(tokio::spawn(async move {
+                let events_future = async move {
                     // convert String -> &str for the trait
                     let refs: Vec<&str> = event_names.iter().map(|s| s.as_str()).collect();
 
@@ -147,7 +149,10 @@ impl PollingMonitor {
                             }
                         })
                         .await;
-                }));
+                }
+                .boxed();
+
+                sub_tasks.push(events_future);
             }
 
             // Keep alive
