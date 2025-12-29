@@ -7,7 +7,7 @@ use std::sync::Arc;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     // group domain routes
@@ -17,11 +17,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .nest("/channels", channels::routes::routes());
 
     let cors = CorsLayer::new()
-        .allow_origin(
-            "http://localhost:3000"
-                .parse::<http::HeaderValue>()
-                .unwrap(),
-        )
+        .allow_origin(AllowOrigin::predicate(|origin, _request_head| {
+            origin.as_bytes().ends_with(b".vercel.app") 
+                || origin.as_bytes().starts_with(b"http://localhost")
+        }))
         .allow_methods([
             Method::GET,
             Method::POST,
