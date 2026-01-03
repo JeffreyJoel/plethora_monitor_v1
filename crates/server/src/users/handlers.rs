@@ -1,3 +1,17 @@
+//! # User Handlers
+//!
+//! HTTP request handlers for user management endpoints.
+//! Handles user registration, profile retrieval, and profile updates.
+//! Integrates with Clerk for authentication and maintains user records in the database.
+//!
+//! ## Authentication Flow
+//!
+//! 1. User authenticates via Clerk (external service)
+//! 2. Client sends JWT token in `Authorization` header
+//! 3. Server validates token using Clerk middleware
+//! 4. User record is created/retrieved from database
+//! 5. Request proceeds with authenticated user context
+
 use super::models::{
     RegisterUserRequest, UpdateUserRequest, UserDetailsResponse, UserRegisteredResponse,
 };

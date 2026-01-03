@@ -1,3 +1,58 @@
+//! # Monitor Crate
+//!
+//! The core monitoring engine for EVM blockchain monitoring.
+//! This crate provides the low-level functionality for tracking smart contract
+//! transactions and events in real-time.
+//!
+//! ## Core Components
+//!
+//! - **`PollingMonitor`** - The main monitoring engine that maintains RPC connections
+//!   and orchestrates transaction and event monitoring
+//! - **`TransactionMonitor`** - Scans blocks for transactions matching user-defined rules
+//! - **`EventMonitor`** - Monitors contract events/logs based on ABI signatures
+//! - **`primitives`** - Shared data structures and utilities (models, ABI fetching, etc.)
+//!
+//! ## Features
+//!
+//! - **Multi-chain Support**: Works with any EVM-compatible blockchain via RPC endpoints
+//! - **ABI-based Decoding**: Automatically decodes transaction inputs and event logs
+//! - **Rule Matching**: Flexible rule system for filtering transactions and events
+//! - **Background Monitoring**: Runs monitoring tasks asynchronously without blocking
+//! - **Notification Integration**: Sends alerts when matches are found
+//!
+//! ## Architecture
+//!
+//! The monitor uses a polling-based approach:
+//!
+//! 1. Connects to an RPC endpoint via HTTP
+//! 2. Polls for new blocks at regular intervals
+//! 3. Filters transactions/events based on configured rules
+//! 4. Decodes matched items using the contract ABI
+//! 5. Triggers notifications for matches
+//!
+//! ## Usage Example
+//!
+//! ```no_run
+//! use monitor::{PollingMonitor, primitives::models::MonitorRule};
+//! use alloy::primitives::Address;
+//! use alloy::json_abi::JsonAbi;
+//!
+//! // Create a monitor instance
+//! let monitor = PollingMonitor::new(
+//!     "https://sepolia.base.org",
+//!     contract_address,
+//!     contract_abi
+//! )?;
+//!
+//! // Start monitoring in the background
+//! let handle = monitor.start_background_monitoring(
+//!     "My Monitor".to_string(),
+//!     function_rules,
+//!     event_rules,
+//!     notification_destination
+//! );
+//! ```
+
 pub mod events;
 pub mod primitives;
 pub mod tx;

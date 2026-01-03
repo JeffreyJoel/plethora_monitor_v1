@@ -1,3 +1,9 @@
+//! # Database Connection
+//!
+//! Database connection pool management and initialization.
+//! Provides a wrapper around SQLx connection pools with configuration
+//! for connection limits, timeouts, and lifecycle management.
+
 use std::time::Duration;
 
 use anyhow;

@@ -1,3 +1,9 @@
+//! # Channel Repository
+//!
+//! Data access layer for notification channel configurations.
+//! Provides CRUD operations for storing and retrieving notification channel
+//! settings (email, webhook, etc.) associated with users.
+
 use notifications::primitives::models::{NotificationChannel, NotificationChannelType};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;

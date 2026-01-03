@@ -1,3 +1,9 @@
+//! # Monitor Repository
+//!
+//! Data access layer for monitor configurations.
+//! Provides CRUD operations for storing and retrieving monitor settings
+//! from the database. Monitor configurations are stored as JSONB for flexibility.
+
 use monitor::primitives::models::MonitorConfig;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;

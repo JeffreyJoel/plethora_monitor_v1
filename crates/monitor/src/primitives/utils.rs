@@ -1,3 +1,9 @@
+//! # Monitor Primitives - Utilities
+//!
+//! Utility functions for ABI fetching, value formatting, and condition evaluation.
+//! Provides helpers for interacting with block explorers, decoding ABI values,
+//! and matching rule conditions against transaction/event data.
+
 use alloy::dyn_abi::DynSolValue;
 use alloy::json_abi::JsonAbi;
 use alloy::{

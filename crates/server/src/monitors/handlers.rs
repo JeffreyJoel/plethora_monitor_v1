@@ -1,3 +1,27 @@
+//! # Monitor Handlers
+//!
+//! HTTP request handlers for monitor management endpoints.
+//! Implements CRUD operations for blockchain monitors, including creation,
+//! retrieval, updates, deletion, and automatic restoration on server startup.
+//!
+//! ## Key Features
+//!
+//! - **Monitor Creation**: Validates configuration, fetches ABI, and starts monitoring
+//! - **Monitor Restoration**: Automatically restores active monitors on server startup
+//! - **Dynamic Updates**: Allows updating monitor rules without downtime
+//! - **User Isolation**: Ensures users can only access their own monitors
+//!
+//! ## Workflow
+//!
+//! When creating a monitor:
+//!
+//! 1. Validates user authentication
+//! 2. Saves monitor configuration to database
+//! 3. Fetches contract ABI from block explorer
+//! 4. Maps user rules to ABI functions/events
+//! 5. Creates and starts the monitoring engine
+//! 6. Stores the monitor task handle in application state
+
 use crate::{
     monitors::models::{CreateMonitorResponse, MonitorResponse},
     state::AppState,

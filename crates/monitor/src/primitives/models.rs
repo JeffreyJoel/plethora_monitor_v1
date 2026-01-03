@@ -1,3 +1,9 @@
+//! # Monitor Primitives - Models
+//!
+//! Core data structures for monitor configuration and rule definitions.
+//! Defines the types used for specifying what to monitor and how to match
+//! transactions and events.
+
 use alloy::json_abi::{Event, Function};
 use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};

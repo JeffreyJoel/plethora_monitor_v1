@@ -1,3 +1,9 @@
+//! # Email Notification Implementation
+//!
+//! Email delivery implementation using Resend API.
+//! Handles sending alert notifications via SMTP/email service.
+//! Provides HTML formatting for email content.
+
 use reqwest::Client;
 use serde::Serialize;
 use std::env;

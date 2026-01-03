@@ -1,3 +1,31 @@
+//! # Plethora Monitor - Main Entry Point
+//!
+//! This is the main binary for the Plethora Monitor server application.
+//! It initializes the database connection, authentication service, and HTTP server.
+//!
+//! ## Initialization Flow
+//!
+//! 1. Loads environment variables from `.env` file
+//! 2. Initializes database connection pool
+//! 3. Sets up Clerk authentication client
+//! 4. Creates application state with default RPC configuration
+//! 5. Restores active monitors from the database
+//! 6. Starts the HTTP server with API routes
+//!
+//! ## Environment Variables
+//!
+//! - `DATABASE_URL` - PostgreSQL connection string (required)
+//! - `CLERK_SECRET_KEY` - Clerk authentication secret key (required)
+//! - `DEFAULT_RPC_URL` - Default RPC endpoint for blockchain connections (optional, defaults to Base Sepolia)
+//! - `PORT` - Server port (optional, defaults to 4000)
+//!
+//! ## API Endpoints
+//!
+//! Once running, the server exposes:
+//! - REST API at `/api/*` (requires authentication)
+//! - Swagger UI at `/swagger-ui`
+//! - OpenAPI spec at `/api-docs/openapi.json`
+
 use clerk_rs::{ClerkConfiguration, clerk::Clerk};
 use database::DbPool;
 use dotenvy::dotenv;

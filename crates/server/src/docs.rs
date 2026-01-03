@@ -1,3 +1,28 @@
+//! # API Documentation Module
+//!
+//! Generates OpenAPI/Swagger documentation for the REST API.
+//! Uses `utoipa` to automatically generate API documentation from
+//! handler function signatures and request/response types.
+//!
+//! ## Documentation Features
+//!
+//! - **Interactive Swagger UI**: Available at `/swagger-ui`
+//! - **OpenAPI Spec**: JSON schema at `/api-docs/openapi.json`
+//! - **JWT Authentication**: Documents Bearer token authentication
+//! - **Request/Response Schemas**: Auto-generated from Rust types
+//!
+//! ## Endpoints Documented
+//!
+//! All API endpoints are automatically included:
+//! - Monitor management (create, read, update, delete, list)
+//! - User management (register, profile operations)
+//! - Channel management (CRUD operations)
+//!
+//! ## Security
+//!
+//! The documentation includes JWT Bearer token authentication,
+//! allowing users to test authenticated endpoints directly from Swagger UI.
+
 use utoipa::OpenApi;
 use crate::{monitors, users, channels};
 use crate::monitors::models::CreateMonitorResponse;

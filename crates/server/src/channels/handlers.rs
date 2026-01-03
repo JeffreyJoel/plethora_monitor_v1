@@ -1,3 +1,15 @@
+//! # Channel Handlers
+//!
+//! HTTP request handlers for notification channel management endpoints.
+//! Implements CRUD operations for notification channels (email, webhook, etc.)
+//! that are used to deliver alerts from monitors.
+//!
+//! ## Usage
+//!
+//! Channels are referenced by ID when creating monitors. When a monitor
+//! detects a matching transaction or event, it sends alerts to the
+//! configured notification channel.
+
 use crate::channels::models::{ChannelResponse, CreateChannelRequest, UpdateChannelRequest};
 use crate::state::AppState;
 use axum::{

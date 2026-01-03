@@ -1,3 +1,15 @@
+//! # Channel Models
+//!
+//! Request and response types for notification channel API endpoints.
+//! Defines data structures for creating, updating, and retrieving channel configurations.
+//!
+//! ## Channel Types
+//!
+//! - **Email**: SMTP-based email notifications
+//! - **Webhook**: HTTP POST to custom endpoints (planned)
+//! - **Discord**: Discord webhook integration (planned)
+//! - **Slack**: Slack webhook integration (planned)
+
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 

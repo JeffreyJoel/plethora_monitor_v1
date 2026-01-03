@@ -1,8 +1,32 @@
+//! # Router Module
+//!
+//! Configures the HTTP router and middleware for the API server.
+//! Sets up routing, CORS, authentication, and API documentation.
+//!
+//! ## Route Structure
+//!
+//! - `/api/monitors/*` - Monitor management endpoints
+//! - `/api/users/*` - User management endpoints
+//! - `/api/channels/*` - Notification channel endpoints
+//! - `/swagger-ui` - Interactive API documentation
+//! - `/api-docs/openapi.json` - OpenAPI specification
+//!
+//! ## Middleware Stack
+//!
+//! 1. **CORS Layer**: Allows requests from Vercel deployments and localhost
+//! 2. **Authentication Layer**: Validates JWT tokens via Clerk
+//! 3. **State Layer**: Provides application state to handlers
+//!
+//! ## Security
+//!
+//! All `/api/*` routes are protected by authentication middleware.
+//! Only the Swagger UI and OpenAPI spec endpoints are publicly accessible.
+
 use crate::state::AppState;
 use crate::{channels, middleware, monitors, users};
 use crate::docs::ApiDoc;
 use axum::http::{Method, header};
-use axum::{Router, http};
+use axum::{Router};
 use std::sync::Arc;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;

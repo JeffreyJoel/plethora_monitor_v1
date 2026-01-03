@@ -1,3 +1,8 @@
+//! # Monitor Models
+//!
+//! Request and response types for monitor API endpoints.
+//! These types are used for serialization/deserialization and OpenAPI documentation.
+
 use monitor::primitives::models::MonitorConfig;
 use uuid::Uuid;
 

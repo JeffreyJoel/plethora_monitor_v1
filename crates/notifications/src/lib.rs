@@ -1,3 +1,42 @@
+//! # Notifications Crate
+//!
+//! Handles delivery of alerts and notifications to various channels.
+//! Provides a unified interface for sending notifications regardless of the
+//! delivery mechanism (email, webhook, Discord, Slack, etc.).
+//!
+//! ## Architecture
+//!
+//! The notification system uses a trait-based design:
+//!
+//! - **`ToDestination`** - Trait for converting channel configurations to destinations
+//! - **`NotificationDestination`** - Enum representing different delivery methods
+//! - **`Alert`** - Structured alert data (source, subject, message)
+//!
+//! ## Supported Channels
+//!
+//! Currently implemented:
+//! - **Email** - SMTP-based email delivery
+//!
+//! Planned:
+//! - **Webhook** - HTTP POST to custom endpoints
+//! - **Discord** - Discord webhook integration
+//! - **Slack** - Slack webhook integration
+//!
+//! ## Usage
+//!
+//! ```no_run
+//! use notifications::{send_notification, primitives::models::{Alert, NotificationDestination}};
+//!
+//! let alert = Alert {
+//!     source: "Monitor Name".to_string(),
+//!     subject: "Transaction Alert".to_string(),
+//!     message: "A matching transaction was detected".to_string(),
+//! };
+//!
+//! let destination = NotificationDestination::Email("user@example.com".to_string());
+//! send_notification(&destination, &alert).await?;
+//! ```
+
 use crate::primitives::models::{
     Alert, NotificationChannel, NotificationChannelType, NotificationDestination,
 };

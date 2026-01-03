@@ -1,3 +1,14 @@
+//! # User Models
+//!
+//! Request and response types for user API endpoints.
+//! Defines the data structures for user registration, profile updates, and user details.
+//!
+//! ## User Data Structure
+//!
+//! - **Clerk ID**: Primary identifier from Clerk authentication service
+//! - **Email**: User's email address (optional, from Clerk)
+//! - **Profile**: Additional user metadata (stored in database)
+
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 

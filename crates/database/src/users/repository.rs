@@ -1,3 +1,9 @@
+//! # User Repository
+//!
+//! Data access layer for user records.
+//! Handles user creation, retrieval, and updates. Integrates with Clerk
+//! authentication by storing Clerk IDs and syncing user data.
+
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 

@@ -1,3 +1,24 @@
+//! # Application State
+//!
+//! Global application state shared across all request handlers.
+//! Maintains active monitor instances, database connections, and
+//! authentication client.
+//!
+//! ## State Components
+//!
+//! - **`active_monitors`**: Thread-safe map of monitor ID to background task handles.
+//!   Used to track running monitors and allow graceful shutdown/updates.
+//! - **`db`**: Database connection pool for persistence operations.
+//! - **`clerk`**: Clerk authentication client for JWT validation.
+//! - **`default_rpc_url`**: Fallback RPC endpoint when users don't provide custom RPCs.
+//!
+//! ## Thread Safety
+//!
+//! All state is designed to be safely shared across async tasks:
+//! - `Arc` for reference counting across threads
+//! - `RwLock` for concurrent read access to active monitors
+//! - Database pool handles connection management internally
+
 use clerk_rs::clerk::Clerk;
 use database::DbPool;
 use std::collections::HashMap;

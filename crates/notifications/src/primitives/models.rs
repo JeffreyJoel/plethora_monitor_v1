@@ -1,3 +1,8 @@
+//! # Notification Primitives - Models
+//!
+//! Core data structures for the notification system.
+//! Defines alert types, notification destinations, and channel configurations.
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
