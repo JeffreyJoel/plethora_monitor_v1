@@ -77,14 +77,17 @@ impl fmt::Display for NotificationChannelType {
     }
 }
 
-impl From<String> for NotificationChannelType {
-    fn from(s: String) -> Self {
+impl TryFrom<String> for NotificationChannelType {
+    type Error = String;
+    
+    fn try_from(s: String) -> Result<Self, Self::Error> {
         match s.as_str() {
-            "Email" => NotificationChannelType::Email,
-            "Discord" => NotificationChannelType::Discord,
-            "Slack" => NotificationChannelType::Slack,
-            "Webhook" => NotificationChannelType::Webhook,
-            _ => NotificationChannelType::Email,
+            "Email" => Ok(NotificationChannelType::Email),
+            "Telegram" => Ok(NotificationChannelType::Telegram),
+            "Discord" => Ok(NotificationChannelType::Discord),
+            "Slack" => Ok(NotificationChannelType::Slack),
+            "Webhook" => Ok(NotificationChannelType::Webhook),
+            _ => Err(format!("Invalid notification channel type: {}", s))
         }
     }
 }
