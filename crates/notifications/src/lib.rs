@@ -16,6 +16,7 @@
 //!
 //! Currently implemented:
 //! - **Email** - SMTP-based email delivery
+//! - **Telegram**
 //!
 //! Planned:
 //! - **Webhook** - HTTP POST to custom endpoints
@@ -38,20 +39,30 @@
 //! ```
 
 use crate::primitives::models::{
-    Alert, NotificationChannel, NotificationChannelType, NotificationDestination,
+    Alert, NotificationChannel, NotificationChannelType, NotificationDestination, TelegramConfig,
 };
+use serde_json;
 use std::fmt;
 
 pub mod email;
 pub mod primitives;
+pub mod telegram;
 
-pub async fn send_notification(
-    dest: &NotificationDestination,
-    alert: &Alert,
-) -> Result<(), anyhow::Error> {
-    match dest {
-        NotificationDestination::Email(recipient) => {
-            email::send_email(recipient, &alert.subject, &alert.message).await
+pub trait ToDestination {
+    fn to_destination(&self) -> Option<NotificationDestination>;
+}
+
+impl ToDestination for NotificationChannel {
+    fn to_destination(&self) -> Option<NotificationDestination> {
+        match self.type_ {
+            NotificationChannelType::Email => {
+                Some(NotificationDestination::Email(self.value.clone()))
+            }
+            NotificationChannelType::Telegram => {
+                let config: TelegramConfig = serde_json::from_str(&self.value).ok()?;
+                Some(NotificationDestination::Telegram(config))
+            }
+            _ => None,
         }
     }
 }
@@ -60,6 +71,7 @@ impl fmt::Display for NotificationChannelType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NotificationChannelType::Email => write!(f, "Email"),
+            NotificationChannelType::Telegram => write!(f, "Telegram"),
             NotificationChannelType::Discord => write!(f, "Discord"),
             NotificationChannelType::Slack => write!(f, "Slack"),
             NotificationChannelType::Webhook => write!(f, "Webhook"),
@@ -79,17 +91,17 @@ impl From<String> for NotificationChannelType {
     }
 }
 
-pub trait ToDestination {
-    fn to_destination(&self) -> Option<NotificationDestination>;
-}
-
-impl ToDestination for NotificationChannel {
-    fn to_destination(&self) -> Option<NotificationDestination> {
-        match self.type_ {
-            NotificationChannelType::Email => {
-                Some(NotificationDestination::Email(self.value.clone()))
-            }
-            _ => None,
+pub async fn send_notification(
+    dest: &NotificationDestination,
+    alert: &Alert,
+) -> Result<(), anyhow::Error> {
+    match dest {
+        NotificationDestination::Email(recipient) => {
+            email::send_email(recipient, &alert.subject, &alert.message).await
+        }
+        NotificationDestination::Telegram(config) => {
+            let full_msg = format!("*{}*\n\n{}", alert.subject, alert.message);
+            telegram::send_telegram_message(&config.token, &config.chat_id, &full_msg).await
         }
     }
 }

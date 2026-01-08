@@ -13,6 +13,13 @@ pub enum NotificationChannelType {
     Discord,
     Slack,
     Webhook,
+    Telegram,
+}
+
+#[derive(Debug, Clone)]
+pub enum NotificationDestination {
+    Email(String),
+    Telegram(TelegramConfig),
 }
 
 #[derive(Debug, Clone)]
@@ -22,9 +29,10 @@ pub struct Alert {
     pub message: String,
 }
 
-#[derive(Debug, Clone)]
-pub enum NotificationDestination {
-    Email(String),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TelegramConfig {
+    pub token: String,
+    pub chat_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
