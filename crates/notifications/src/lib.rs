@@ -17,26 +17,12 @@
 //! Currently implemented:
 //! - **Email** - SMTP-based email delivery
 //! - **Telegram**
+//! - **Discord** - Discord webhook integration
 //!
 //! Planned:
 //! - **Webhook** - HTTP POST to custom endpoints
-//! - **Discord** - Discord webhook integration
 //! - **Slack** - Slack webhook integration
 //!
-//! ## Usage
-//!
-//! ```no_run
-//! use notifications::{send_notification, primitives::models::{Alert, NotificationDestination}};
-//!
-//! let alert = Alert {
-//!     source: "Monitor Name".to_string(),
-//!     subject: "Transaction Alert".to_string(),
-//!     message: "A matching transaction was detected".to_string(),
-//! };
-//!
-//! let destination = NotificationDestination::Email("user@example.com".to_string());
-//! send_notification(&destination, &alert).await?;
-//! ```
 
 use crate::primitives::models::{
     Alert, NotificationChannel, NotificationChannelType, NotificationDestination, TelegramConfig,
@@ -44,6 +30,7 @@ use crate::primitives::models::{
 use serde_json;
 use std::fmt;
 
+pub mod discord;
 pub mod email;
 pub mod primitives;
 pub mod telegram;
@@ -56,12 +43,20 @@ impl ToDestination for NotificationChannel {
     fn to_destination(&self) -> Option<NotificationDestination> {
         match self.type_ {
             NotificationChannelType::Email => {
+                // for email, the 'value' field in the DB is the email string
                 Some(NotificationDestination::Email(self.value.clone()))
             }
             NotificationChannelType::Telegram => {
                 let config: TelegramConfig = serde_json::from_str(&self.value).ok()?;
+                // for telegram, the 'value' field in the DB is a json string of the config struct
+                //like this: "{\"token\": \"12345:AbCdEf\", \"chat_id\": \"987654321\"}"
                 Some(NotificationDestination::Telegram(config))
             }
+            NotificationChannelType::Discord => {
+                // for discord, the 'value' field in the DB is the webhook url string
+                Some(NotificationDestination::Discord(self.value.clone()))
+            }
+
             _ => None,
         }
     }
@@ -102,6 +97,10 @@ pub async fn send_notification(
         NotificationDestination::Telegram(config) => {
             let full_msg = format!("*{}*\n\n{}", alert.subject, alert.message);
             telegram::send_telegram_message(&config.token, &config.chat_id, &full_msg).await
+        }
+        NotificationDestination::Discord(webhook_url) => {
+            let full_msg = format!("**{}**\n\n{}", alert.subject, alert.message);
+            discord::send_discord_webhook(webhook_url, &full_msg).await
         }
     }
 }

@@ -20,6 +20,7 @@ pub enum NotificationChannelType {
 pub enum NotificationDestination {
     Email(String),
     Telegram(TelegramConfig),
+    Discord(String),
 }
 
 #[derive(Debug, Clone)]
