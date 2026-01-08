@@ -21,6 +21,7 @@ use clerk_rs::validators::authorizer::ClerkJwt;
 use database::UserRepository;
 use notifications::primitives::models::{NotificationChannel, NotificationChannelType};
 use std::sync::Arc;
+use utils::crypto;
 use uuid::Uuid;
 
 #[utoipa::path(
@@ -46,11 +47,17 @@ pub async fn create_channel(
 
     let channel_type = NotificationChannelType::from(payload.type_.clone());
 
+    let value_to_store = if payload.type_ == "telegram" || payload.type_ == "discord" {
+        crypto::encrypt(&payload.value)
+    } else {
+        payload.value
+    };
+
     let channel = NotificationChannel {
         id: None,
         type_: channel_type,
         label: payload.label,
-        value: payload.value,
+        value: value_to_store,
     };
 
     let channel_id = state

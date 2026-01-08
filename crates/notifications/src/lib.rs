@@ -29,6 +29,7 @@ use crate::primitives::models::{
 };
 use serde_json;
 use std::fmt;
+use utils::crypto;
 
 pub mod discord;
 pub mod email;
@@ -47,14 +48,16 @@ impl ToDestination for NotificationChannel {
                 Some(NotificationDestination::Email(self.value.clone()))
             }
             NotificationChannelType::Telegram => {
-                let config: TelegramConfig = serde_json::from_str(&self.value).ok()?;
+                let json_string = crypto::decrypt(&self.value).ok()?;
+                let config: TelegramConfig = serde_json::from_str(&json_string).ok()?;
                 // for telegram, the 'value' field in the DB is a json string of the config struct
                 //like this: "{\"token\": \"12345:AbCdEf\", \"chat_id\": \"987654321\"}"
                 Some(NotificationDestination::Telegram(config))
             }
             NotificationChannelType::Discord => {
+                let webhook_url = crypto::decrypt(&self.value).ok()?;
                 // for discord, the 'value' field in the DB is the webhook url string
-                Some(NotificationDestination::Discord(self.value.clone()))
+                Some(NotificationDestination::Discord(webhook_url))
             }
 
             _ => None,
