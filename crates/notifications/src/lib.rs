@@ -68,11 +68,11 @@ impl ToDestination for NotificationChannel {
 impl fmt::Display for NotificationChannelType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NotificationChannelType::Email => write!(f, "Email"),
-            NotificationChannelType::Telegram => write!(f, "Telegram"),
-            NotificationChannelType::Discord => write!(f, "Discord"),
-            NotificationChannelType::Slack => write!(f, "Slack"),
-            NotificationChannelType::Webhook => write!(f, "Webhook"),
+            NotificationChannelType::Email => write!(f, "email"),
+            NotificationChannelType::Telegram => write!(f, "telegram"),
+            NotificationChannelType::Discord => write!(f, "discord"),
+            NotificationChannelType::Slack => write!(f, "slack"),
+            NotificationChannelType::Webhook => write!(f, "webhook"),
         }
     }
 }
@@ -81,12 +81,12 @@ impl TryFrom<String> for NotificationChannelType {
     type Error = String;
     
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        match s.as_str() {
-            "Email" => Ok(NotificationChannelType::Email),
-            "Telegram" => Ok(NotificationChannelType::Telegram),
-            "Discord" => Ok(NotificationChannelType::Discord),
-            "Slack" => Ok(NotificationChannelType::Slack),
-            "Webhook" => Ok(NotificationChannelType::Webhook),
+        match s.to_lowercase().as_str() {
+            "email" => Ok(NotificationChannelType::Email),
+            "telegram" => Ok(NotificationChannelType::Telegram),
+            "discord" => Ok(NotificationChannelType::Discord),
+            "slack" => Ok(NotificationChannelType::Slack),
+            "webhook" => Ok(NotificationChannelType::Webhook),
             _ => Err(format!("Invalid notification channel type: {}", s))
         }
     }

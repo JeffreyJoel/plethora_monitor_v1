@@ -45,7 +45,11 @@ pub async fn create_channel(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let channel_type = NotificationChannelType::from(payload.type_.clone());
+    let channel_type = NotificationChannelType::try_from(payload.type_.clone())
+    .map_err(|e| {
+        tracing::error!("Invalid channel type: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     let value_to_store = if payload.type_ == "telegram" || payload.type_ == "discord" {
         crypto::encrypt(&payload.value)

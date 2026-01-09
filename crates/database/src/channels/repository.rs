@@ -62,7 +62,8 @@ impl ChannelRepository {
 
             channels.push(NotificationChannel {
                 id: Some(id),
-                type_: NotificationChannelType::from(type_str),
+                type_: NotificationChannelType::try_from(type_str)
+    .map_err(|e| sqlx::Error::Decode(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?,
                 label,
                 value,
             });
@@ -92,7 +93,8 @@ impl ChannelRepository {
 
             Ok(Some(NotificationChannel {
                 id: Some(id),
-                type_: NotificationChannelType::from(type_str),
+                type_: NotificationChannelType::try_from(type_str)
+    .map_err(|e| sqlx::Error::Decode(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?,
                 label,
                 value,
             }))
