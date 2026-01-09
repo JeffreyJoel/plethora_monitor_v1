@@ -73,6 +73,7 @@ use serde::{Deserialize, Serialize};
 
 use futures::future::{BoxFuture, FutureExt, join_all};
 use tokio::task::JoinHandle;
+use tracing::error;
 
 pub type HttpProvider = RootProvider<AnyNetwork>;
 
@@ -148,7 +149,14 @@ impl PollingMonitor {
                                 let dest_clone = dest.clone();
 
                                 tokio::spawn(async move {
-                                    let _ = send_notification(&dest_clone, &alert).await;
+                                    if let Err(e) = send_notification(&dest_clone, &alert).await {
+                                        error!(
+                                            destination = ?dest_clone,
+                                            source = %alert.source,
+                                            subject = %alert.subject,
+                                            "Failed to send notification: {e}"
+                                        );
+                                    }
                                 });
                             }
                         })
@@ -181,9 +189,13 @@ impl PollingMonitor {
                                 if rule.event_match(&log) {
                                     println!("[EVENT ALERT] {}: Block {:?}", n, log.block_number);
                                     let event_details = events::get_event_details(&log, &abi);
+                                    let block = log
+                                        .block_number
+                                        .map(|b| b.to_string())
+                                        .unwrap_or_else(|| "unknown".into());
                                     let msg = format!(
-                                        "Event Alert: {}\nBlock: {:?}\n{}",
-                                        n, log.block_number, event_details
+                                        "Event Alert: {}\nBlock: {}\n{}",
+                                        n, block, event_details
                                     );
 
                                     if let Some(dest) = &dest_for_events {
@@ -196,7 +208,16 @@ impl PollingMonitor {
                                         let dest_clone = dest.clone();
 
                                         tokio::spawn(async move {
-                                            let _ = send_notification(&dest_clone, &alert).await;
+                                            if let Err(e) =
+                                                send_notification(&dest_clone, &alert).await
+                                            {
+                                                error!(
+                                                    destination = ?dest_clone,
+                                                    source = %alert.source,
+                                                    subject = %alert.subject,
+                                                    "Failed to send notification: {e}"
+                                                );
+                                            }
                                         });
                                     }
                                     break; // Only notify once per log

@@ -45,8 +45,7 @@ pub async fn create_channel(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let channel_type = NotificationChannelType::try_from(payload.type_.clone())
-    .map_err(|e| {
+    let channel_type = NotificationChannelType::try_from(payload.type_.clone()).map_err(|e| {
         tracing::error!("Invalid channel type: {}", e);
         StatusCode::BAD_REQUEST
     })?;
@@ -193,27 +192,27 @@ pub async fn update_channel(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // First, verify the channel exists and belongs to the user
-    let channel = state
+    let existing_channel = state
         .db
         .channels
         .get_channel_by_id(channel_id, user_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if channel.is_none() {
+    let Some(existing_channel) = existing_channel else {
         return Err(StatusCode::NOT_FOUND);
-    }
+    };
+
+    let value_to_store = payload.value.clone().map(|v| match existing_channel.type_ {
+        NotificationChannelType::Telegram | NotificationChannelType::Discord => crypto::encrypt(&v),
+        _ => v,
+    });
 
     // Update the channel
     state
         .db
         .channels
-        .update_channel(
-            channel_id,
-            user_id,
-            payload.label.clone(),
-            payload.value.clone(),
-        )
+        .update_channel(channel_id, user_id, payload.label.clone(), value_to_store)
         .await
         .map_err(|e| {
             tracing::error!("Failed to update channel: {}", e);

@@ -29,6 +29,7 @@ use crate::primitives::models::{
 };
 use serde_json;
 use std::fmt;
+use tracing::warn;
 use utils::crypto;
 
 pub mod discord;
@@ -48,14 +49,42 @@ impl ToDestination for NotificationChannel {
                 Some(NotificationDestination::Email(self.value.clone()))
             }
             NotificationChannelType::Telegram => {
-                let json_string = crypto::decrypt(&self.value).ok()?;
-                let config: TelegramConfig = serde_json::from_str(&json_string).ok()?;
+                let json_string = match crypto::decrypt(&self.value) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!(
+                            channel_id = ?self.id,
+                            "Failed to decrypt telegram config (channel disabled): {e}"
+                        );
+                        return None;
+                    }
+                };
+
+                let config: TelegramConfig = match serde_json::from_str(&json_string) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!(
+                            channel_id = ?self.id,
+                            "Invalid telegram config JSON (channel disabled): {e}"
+                        );
+                        return None;
+                    }
+                };
                 // for telegram, the 'value' field in the DB is a json string of the config struct
                 //like this: "{\"token\": \"12345:AbCdEf\", \"chat_id\": \"987654321\"}"
                 Some(NotificationDestination::Telegram(config))
             }
             NotificationChannelType::Discord => {
-                let webhook_url = crypto::decrypt(&self.value).ok()?;
+                let webhook_url = match crypto::decrypt(&self.value) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!(
+                            channel_id = ?self.id,
+                            "Failed to decrypt discord webhook URL (channel disabled): {e}"
+                        );
+                        return None;
+                    }
+                };
                 // for discord, the 'value' field in the DB is the webhook url string
                 Some(NotificationDestination::Discord(webhook_url))
             }
@@ -101,7 +130,9 @@ pub async fn send_notification(
             email::send_email(recipient, &alert.subject, &alert.message).await
         }
         NotificationDestination::Telegram(config) => {
-            let full_msg = format!("*{}*\n\n{}", alert.subject, alert.message);
+            // Plain text by default to avoid Telegram Markdown parse failures
+            // caused by unescaped on-chain decoded strings and punctuation.
+            let full_msg = format!("{}\n\n{}", alert.subject, alert.message);
             telegram::send_telegram_message(&config.token, &config.chat_id, &full_msg).await
         }
         NotificationDestination::Discord(webhook_url) => {
