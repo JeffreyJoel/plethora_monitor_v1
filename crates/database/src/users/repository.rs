@@ -17,30 +17,26 @@ impl UserRepository {
         Self { pool }
     }
 
-    // get existing or create new user
+    /// Gets existing user or creates new one atomically.
     pub async fn get_or_create(
         &self,
         clerk_id: &str,
         email: Option<&str>,
     ) -> Result<Uuid, sqlx::Error> {
-        // check if the user exists
-        if let Some(id) = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE clerk_id = $1")
-            .bind(clerk_id)
-            .fetch_optional(&self.pool)
-            .await?
-        {
-            return Ok(id);
-        }
+        let user_id: Uuid = sqlx::query_scalar(
+            r#"
+            INSERT INTO users (clerk_id, email) 
+            VALUES ($1, $2) 
+            ON CONFLICT (clerk_id) DO UPDATE SET email = COALESCE(EXCLUDED.email, users.email)
+            RETURNING id
+            "#,
+        )
+        .bind(clerk_id)
+        .bind(email)
+        .fetch_one(&self.pool)
+        .await?;
 
-        // register new user
-        let new_user_id: Uuid =
-            sqlx::query_scalar("INSERT INTO users (clerk_id, email) VALUES ($1, $2) RETURNING id")
-                .bind(clerk_id)
-                .bind(email)
-                .fetch_one(&self.pool)
-                .await?;
-
-        Ok(new_user_id)
+        Ok(user_id)
     }
 
     // Update user profile

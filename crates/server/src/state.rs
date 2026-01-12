@@ -11,6 +11,8 @@
 //! - **`db`**: Database connection pool for persistence operations.
 //! - **`clerk`**: Clerk authentication client for JWT validation.
 //! - **`default_rpc_url`**: Fallback RPC endpoint when users don't provide custom RPCs.
+//! - **`block_watcher_registry`**: Shared registry for BlockWatcher instances per RPC URL.
+//!   Reduces RPC calls by consolidating block polling across multiple monitors.
 //!
 //! ## Thread Safety
 //!
@@ -18,9 +20,11 @@
 //! - `Arc` for reference counting across threads
 //! - `RwLock` for concurrent read access to active monitors
 //! - Database pool handles connection management internally
+//! - BlockWatcherRegistry uses internal RwLock for thread-safe access
 
 use clerk_rs::clerk::Clerk;
 use database::DbPool;
+use monitor::BlockWatcherRegistry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -31,6 +35,7 @@ pub struct AppState {
     pub db: DbPool,
     pub clerk: Clerk,
     pub default_rpc_url: String,
+    pub block_watcher_registry: Arc<BlockWatcherRegistry>,
 }
 
 impl AppState {
@@ -40,6 +45,7 @@ impl AppState {
             db,
             clerk,
             default_rpc_url: default_rpc,
+            block_watcher_registry: Arc::new(BlockWatcherRegistry::new()),
         }
     }
 }

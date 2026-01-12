@@ -1,6 +1,7 @@
 //! Transaction monitoring module.
 
 use crate::PollingMonitor;
+use crate::block_watcher::BlockUpdate;
 use crate::primitives::models::MonitorRule;
 use crate::primitives::utils::format_value;
 use alloy::consensus::Transaction;
@@ -11,65 +12,73 @@ use alloy::network::{AnyRpcTransaction, TransactionResponse};
 use alloy::providers::Provider;
 use alloy::rpc::types::BlockId;
 use std::time::Duration;
+use tokio::sync::broadcast;
 use tokio::time::sleep;
 
-#[allow(async_fn_in_trait)]
-pub trait TransactionMonitor {
-    async fn monitor_transactions_polling<F>(
+impl PollingMonitor {
+    /// this method subscribes to block updates from the BlockWatcherRegistry and only
+    /// processes blocks when notified, reducing RPC calls when multiple
+    /// monitors share the same chain.
+    pub async fn monitor_transactions_with_watcher<F>(
         self,
         rules: Vec<MonitorRule>,
-        handler: F,
-    ) -> Result<(), anyhow::Error>
-    where
-        F: FnMut(AnyRpcTransaction) + Send + 'static;
-}
-
-impl TransactionMonitor for PollingMonitor {
-    async fn monitor_transactions_polling<F>(
-        self,
-        rules: Vec<MonitorRule>,
+        mut block_receiver: broadcast::Receiver<BlockUpdate>,
         mut handler: F,
     ) -> Result<(), anyhow::Error>
     where
         F: FnMut(AnyRpcTransaction) + Send + 'static,
     {
         tracing::info!(
-            "TxMonitor: Started monitoring transactions for contract {:?}",
+            "TxMonitor (watcher): Started monitoring transactions for contract {:?}",
             self.contract_address
         );
 
-        let mut current_block = self.provider.get_block_number().await?;
-
         loop {
-            let latest_block = match self.provider.get_block_number().await {
-                Ok(num) => num,
-                Err(e) => {
-                    tracing::error!("Error fetching latest block number: {}", e);
-                    sleep(Duration::from_secs(2)).await;
+            // Wait for block updates from the shared watcher
+            let update = match block_receiver.recv().await {
+                Ok(update) => update,
+                Err(broadcast::error::RecvError::Closed) => {
+                    tracing::warn!("TxMonitor: Block watcher channel closed, stopping");
+                    return Ok(());
+                }
+                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                    tracing::warn!(
+                        "TxMonitor: Lagged behind by {} blocks, catching up",
+                        skipped
+                    );
                     continue;
                 }
             };
+
+            // Check if we should try recovering to primary
+            self.try_recover_primary().await;
+
+            // Process all blocks from previous+1 to current
+            let mut current_block = update.previous_block;
+            let latest_block = update.block_number;
 
             while current_block < latest_block {
                 let target_block = current_block + 1;
 
                 match self
-                    .provider
+                    .provider()
                     .get_block_receipts(BlockId::Number(target_block.into()))
                     .await
                 {
                     Ok(Some(receipts)) => {
+                        self.record_success();
                         for receipt in receipts {
                             if receipt.to != Some(self.contract_address) {
                                 continue;
                             }
 
                             match self
-                                .provider
+                                .provider()
                                 .get_transaction_by_hash(receipt.transaction_hash)
                                 .await
                             {
                                 Ok(Some(tx)) => {
+                                    self.record_success();
                                     use crate::tx::TxMatcher;
 
                                     for rule in &rules {
@@ -91,6 +100,7 @@ impl TransactionMonitor for PollingMonitor {
                                     );
                                 }
                                 Err(e) => {
+                                    self.record_failure();
                                     tracing::error!(
                                         "Error fetching transaction {:?}: {}",
                                         receipt.transaction_hash,
@@ -106,6 +116,7 @@ impl TransactionMonitor for PollingMonitor {
                         continue;
                     }
                     Err(e) => {
+                        self.record_failure();
                         tracing::error!(
                             "Error fetching receipts for block {}: {}",
                             target_block,
@@ -115,8 +126,6 @@ impl TransactionMonitor for PollingMonitor {
                     }
                 }
             }
-
-            sleep(Duration::from_secs(2)).await;
         }
     }
 }

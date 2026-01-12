@@ -111,24 +111,37 @@ pub async fn restore_monitors(state: Arc<AppState>) {
             None
         };
 
-        // Create and start the monitor
-        match PollingMonitor::new(&rpc_url, config.address, abi) {
+        // Create and start the monitor with shared block watcher
+        match PollingMonitor::new(&rpc_url, config.address, abi, &config.chain) {
             Ok(monitor_engine) => {
-                let handle = monitor_engine.start_background_monitoring(
-                    config.name.clone(),
-                    function_rules,
-                    event_rules,
-                    notification_destination,
-                );
-
-                state
-                    .active_monitors
-                    .write()
+                match monitor_engine
+                    .start_background_monitoring_with_watcher(
+                        config.name.clone(),
+                        function_rules,
+                        event_rules,
+                        notification_destination,
+                        state.block_watcher_registry.clone(),
+                    )
                     .await
-                    .insert(monitor_id_str, handle);
+                {
+                    Ok(handle) => {
+                        state
+                            .active_monitors
+                            .write()
+                            .await
+                            .insert(monitor_id_str, handle);
 
-                info!("✓ Restored monitor: {} ({})", config.name, monitor_id);
-                restored_count += 1;
+                        info!("✓ Restored monitor: {} ({})", config.name, monitor_id);
+                        restored_count += 1;
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to start monitor {} ({}): {}. Skipping.",
+                            config.name, monitor_id, e
+                        );
+                        failed_count += 1;
+                    }
+                }
             }
             Err(e) => {
                 error!(
@@ -218,15 +231,22 @@ pub async fn create_monitor(
         None
     };
 
-    let monitor_engine = PollingMonitor::new(&rpc_url, payload.address, abi)
+    let monitor_engine = PollingMonitor::new(&rpc_url, payload.address, abi, &payload.chain)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let handle = monitor_engine.start_background_monitoring(
-        payload.name,
-        function_rules,
-        event_rules,
-        notification_destination,
-    );
+    let handle = monitor_engine
+        .start_background_monitoring_with_watcher(
+            payload.name.clone(),
+            function_rules,
+            event_rules,
+            notification_destination,
+            state.block_watcher_registry.clone(),
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to start monitor with watcher: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     state
         .active_monitors
@@ -389,20 +409,29 @@ pub async fn update_monitor(
             None
         };
 
-        if let Ok(engine) = PollingMonitor::new(&rpc_url, payload.address, abi) {
-            let new_handle = engine.start_background_monitoring(
-                payload.name,
-                function_rules,
-                event_rules,
-                notification_destination,
-            );
-
-            state
-                .active_monitors
-                .write()
+        if let Ok(engine) = PollingMonitor::new(&rpc_url, payload.address, abi, &payload.chain) {
+            match engine
+                .start_background_monitoring_with_watcher(
+                    payload.name.clone(),
+                    function_rules,
+                    event_rules,
+                    notification_destination,
+                    state.block_watcher_registry.clone(),
+                )
                 .await
-                .insert(monitor_id.to_string(), new_handle);
-            println!("Restarted monitor task: {}", monitor_id);
+            {
+                Ok(new_handle) => {
+                    state
+                        .active_monitors
+                        .write()
+                        .await
+                        .insert(monitor_id.to_string(), new_handle);
+                    println!("Restarted monitor task: {}", monitor_id);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to restart monitor {}: {}", monitor_id, e);
+                }
+            }
         }
     }
 

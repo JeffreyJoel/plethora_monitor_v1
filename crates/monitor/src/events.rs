@@ -1,5 +1,6 @@
 //! Event monitoring module.
 
+use crate::block_watcher::BlockUpdate;
 use crate::PollingMonitor;
 use crate::primitives::utils::format_value;
 use alloy::dyn_abi::EventExt;
@@ -7,36 +8,28 @@ use alloy::json_abi::JsonAbi;
 use alloy::primitives::B256;
 use alloy::providers::Provider;
 use alloy::rpc::types::{Filter, Log};
-use std::time::Duration;
-use tokio::time::sleep;
+use tokio::sync::broadcast;
 
 /// Trait for matching events against rules
 pub trait EventMatcher {
     fn event_match(&self, log: &Log) -> bool;
 }
 
-#[allow(async_fn_in_trait)]
-pub trait EventMonitor {
-    async fn monitor_events_polling<F>(
+impl PollingMonitor {
+    /// this method subscribes to block updates from the BlockWatcherRegistry and only
+    /// fetches logs when notified, reducing RPC calls when multiple
+    /// monitors share the same chain.
+    pub async fn monitor_events_with_watcher<F>(
         self,
         event_names: &[&str],
-        handler: F,
-    ) -> Result<(), anyhow::Error>
-    where
-        F: FnMut(Log) + Send + 'static;
-}
-
-impl EventMonitor for PollingMonitor {
-    async fn monitor_events_polling<F>(
-        self,
-        event_names: &[&str],
+        mut block_receiver: broadcast::Receiver<BlockUpdate>,
         mut handler: F,
     ) -> Result<(), anyhow::Error>
     where
         F: FnMut(Log) + Send + 'static,
     {
         println!(
-            "EventsMonitor: Watching transactions for {:?}",
+            "EventsMonitor (watcher): Watching transactions for {:?}",
             self.contract_address
         );
 
@@ -53,44 +46,50 @@ impl EventMonitor for PollingMonitor {
         }
 
         if topics.is_empty() {
-             eprintln!("EventsMonitor: No valid event topics found. Monitor will not catch anything.");
+            eprintln!("EventsMonitor: No valid event topics found. Monitor will not catch anything.");
         }
 
-        let mut current_block = self.provider.get_block_number().await?;
-
         loop {
-            let latest_block = match self.provider.get_block_number().await {
-                Ok(num) => num,
-                Err(e) => {
-                    eprintln!("Error fetching block number: {}", e);
-                    sleep(Duration::from_secs(2)).await;
+            // Wait for block updates from the shared watcher
+            let update = match block_receiver.recv().await {
+                Ok(update) => update,
+                Err(broadcast::error::RecvError::Closed) => {
+                    tracing::warn!("EventsMonitor: Block watcher channel closed, stopping");
+                    return Ok(());
+                }
+                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                    tracing::warn!(
+                        "EventsMonitor: Lagged behind by {} blocks, catching up",
+                        skipped
+                    );
                     continue;
                 }
             };
 
-            if latest_block > current_block {
-                let from_block = current_block + 1;
-                let to_block = latest_block;
+            // Check if we should try recovering to primary
+            self.try_recover_primary().await;
 
-                let filter = Filter::new()
-                    .address(self.contract_address)
-                    .event_signature(topics.clone())
-                    .from_block(from_block)
-                    .to_block(to_block);
+            let from_block = update.previous_block + 1;
+            let to_block = update.block_number;
 
-                match self.provider.get_logs(&filter).await {
-                    Ok(logs) => {
-                        for log in logs {
-                            handler(log);
-                        }
+            let filter = Filter::new()
+                .address(self.contract_address)
+                .event_signature(topics.clone())
+                .from_block(from_block)
+                .to_block(to_block);
+
+            match self.provider().get_logs(&filter).await {
+                Ok(logs) => {
+                    self.record_success();
+                    for log in logs {
+                        handler(log);
                     }
-                    Err(e) => eprintln!("Error fetching logs: {}", e),
                 }
-
-                current_block = latest_block;
+                Err(e) => {
+                    self.record_failure();
+                    eprintln!("Error fetching logs: {}", e);
+                }
             }
-
-            sleep(Duration::from_secs(2)).await;
         }
     }
 }

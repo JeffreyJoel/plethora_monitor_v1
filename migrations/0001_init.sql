@@ -3,14 +3,14 @@ CREATE TABLE IF NOT EXISTS users (
     clerk_id VARCHAR(255) UNIQUE NOT NULL,
 
     email VARCHAR(255),
-    first_name VARCHAR(100),
+    full_name VARCHAR(100),
 
     created_at TIMESTAMP DEFAULT current_timestamp()
 );
 
 CREATE TABLE IF NOT EXISTS monitors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     configuration JSONB NOT NULL,
     is_active BOOLEAN DEFAULT true,

@@ -1,4 +1,4 @@
-//! # Primitives Module
+//! # Monitor Primitives
 //!
 //! Core data structures and utilities for the monitor crate.
 //! Contains shared types, models, and helper functions used throughout
@@ -17,6 +17,11 @@
 //!   - `format_value` - Formats decoded ABI values for display
 //!   - `check_argument_condition` - Evaluates rule conditions against decoded values
 //!
+//! - **`chains`** - Chain configuration:
+//!   - `get_default_rpc_url` - Returns default public RPC URL for a chain
+//!   - `get_chain_id` - Returns chain ID for a chain name
+//!   - `supported_chains` - Lists all supported chain names
+//!
 //! ## Key Concepts
 //!
 //! **Monitor Rules**: User-defined patterns that specify which transactions
@@ -26,5 +31,6 @@
 //! - Transaction participants (from/to addresses)
 //! - Function/event arguments with operators (equals, greater than, contains, etc.)
 
+pub mod chains;
 pub mod models;
 pub mod utils;
