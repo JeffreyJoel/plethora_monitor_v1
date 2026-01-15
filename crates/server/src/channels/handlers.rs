@@ -11,8 +11,8 @@
 //! configured notification channel.
 
 use crate::channels::models::{
-    ChannelResponse, CreateChannelRequest, UpdateChannelRequest, VerificationResponse,
-    VerifyEmailParams,
+    ChannelResponse, CreateChannelRequest, ResendVerificationRequest, UpdateChannelRequest,
+    VerificationResponse, VerifyEmailParams,
 };
 use crate::state::AppState;
 use axum::{
@@ -80,8 +80,9 @@ pub async fn create_channel(
     // Send verification email if this is an email channel
     if channel.type_ == NotificationChannelType::Email {
         if let Some(token) = verification_token {
-            let base_url =
-                std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://yourapp.com".to_string());
+            let base_url = payload
+                .base_url
+                .unwrap_or_else(|| std::env::var("APP_BASE_URL").unwrap_or_default());
 
             if let Err(e) =
                 notifications::email::send_verification_email(&channel.value, &token, &base_url)
@@ -366,6 +367,7 @@ pub async fn resend_verification(
     State(state): State<Arc<AppState>>,
     Extension(jwt): Extension<ClerkJwt>,
     Path(channel_id): Path<Uuid>,
+    body: Option<Json<ResendVerificationRequest>>,
 ) -> Result<Json<VerificationResponse>, StatusCode> {
     let user_repo = UserRepository::new(state.db.pool.clone());
     let user_id = user_repo
@@ -386,8 +388,9 @@ pub async fn resend_verification(
 
     match result {
         Some((token, email)) => {
-            let base_url =
-                std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://yourapp.com".to_string());
+            let base_url = body
+                .and_then(|b| b.base_url.clone())
+                .unwrap_or_else(|| std::env::var("APP_BASE_URL").unwrap_or_default());
 
             notifications::email::send_verification_email(&email, &token, &base_url)
                 .await

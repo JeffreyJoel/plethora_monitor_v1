@@ -19,6 +19,7 @@ pub struct CreateChannelRequest {
     pub type_: String,
     pub label: String,
     pub value: String,
+    pub base_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -46,4 +47,10 @@ pub struct VerifyEmailParams {
 pub struct VerificationResponse {
     pub success: bool,
     pub message: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema, Default)]
+pub struct ResendVerificationRequest {
+    /// Optional base URL for verification links (falls back to APP_BASE_URL env var)
+    pub base_url: Option<String>,
 }
