@@ -66,3 +66,9 @@ pub fn decrypt(encrypted_val: &str) -> Result<String, anyhow::Error> {
 
     Ok(String::from_utf8(plaintext_bytes)?)
 }
+
+/// Generate a secure random verification token (32-byte hex string)
+pub fn generate_verification_token() -> String {
+    let bytes: [u8; 32] = thread_rng().r#gen();
+    hex::encode(bytes)
+}

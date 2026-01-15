@@ -6,8 +6,10 @@ edition = "2024"
 [dependencies]
 monitor = { path = "../monitor" }
 notifications = { path = "../notifications" }
+utils = { path = "../utils" }
 
 anyhow = { workspace = true }
+chrono = { workspace = true }
 serde = {workspace = true}
 serde_json = { workspace = true }
 sqlx = { workspace = true }

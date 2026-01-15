@@ -28,10 +28,22 @@ pub struct ChannelResponse {
     pub type_: String,
     pub label: String,
     pub value: String,
+    pub verified: bool,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateChannelRequest {
     pub label: Option<String>,
     pub value: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct VerifyEmailParams {
+    pub token: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct VerificationResponse {
+    pub success: bool,
+    pub message: String,
 }

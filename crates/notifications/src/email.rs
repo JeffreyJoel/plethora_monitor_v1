@@ -145,3 +145,97 @@ fn format_details_to_rows(raw_text: &str) -> String {
         })
         .collect()
 }
+
+/// Send a verification email to confirm email channel ownership
+pub async fn send_verification_email(
+    recipient: &str,
+    token: &str,
+    base_url: &str,
+) -> Result<(), anyhow::Error> {
+    let api_key = env::var("BREVO_API_KEY").expect("BREVO_API_KEY must be set");
+    let client = Client::new();
+
+    let verification_link = format!("{}/verify-channel?token={}", base_url, token);
+    let html = generate_verification_html(&verification_link);
+    let subject = "Verify your email for Plethora Monitor";
+    let body = format!(
+        "Click this link to verify your email: {}",
+        verification_link
+    );
+
+    let payload = EmailPayload {
+        sender: Sender {
+            name: "Plethora Monitor".to_string(),
+            email: "plethora.onchain@gmail.com".to_string(),
+        },
+        to: vec![Recipient {
+            email: recipient.to_string(),
+        }],
+        subject: subject.to_string(),
+        text_content: body,
+        html_content: html,
+    };
+
+    let response = client
+        .post("https://api.brevo.com/v3/smtp/email")
+        .header("api-key", api_key)
+        .header("content-type", "application/json")
+        .json(&payload)
+        .send()
+        .await?;
+
+    if response.status().is_success() {
+        println!("Verification email sent to {}", recipient);
+    } else {
+        let error_text = response.text().await?;
+        eprintln!("❌ Brevo API Error: {}", error_text);
+    }
+
+    Ok(())
+}
+
+fn generate_verification_html(verification_link: &str) -> String {
+    format!(
+        r##"
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f7; margin: 0; padding: 0; }}
+    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+    .card {{ background: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }}
+    .header {{ background: #1a1a1a; color: #ffffff; padding: 20px; text-align: center; }}
+    .header h1 {{ margin: 0; font-size: 24px; }}
+    .content {{ padding: 30px; text-align: center; }}
+    .icon {{ font-size: 48px; margin-bottom: 20px; }}
+    .btn {{ display: inline-block; background: #2563eb; color: #ffffff; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 20px; }}
+    .btn:hover {{ background: #1d4ed8; }}
+    .footer {{ text-align: center; padding: 20px; color: #999; font-size: 12px; }}
+    .note {{ color: #666; font-size: 14px; margin-top: 20px; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <h1>Plethora Monitor</h1>
+      </div>
+      <div class="content">
+        <div class="icon">📧</div>
+        <h2>Verify Your Email Address</h2>
+        <p>Thanks for adding this email to your Plethora Monitor notification channels. Please click the button below to verify your email address.</p>
+        <a href="{}" class="btn">Verify Email Address</a>
+        <p class="note">This link will expire in 24 hours. If you didn't request this verification, you can safely ignore this email.</p>
+      </div>
+    </div>
+    <div class="footer">
+      Plethora Monitor • Email Verification
+    </div>
+  </div>
+</body>
+</html>
+"##,
+        verification_link
+    )
+}
+

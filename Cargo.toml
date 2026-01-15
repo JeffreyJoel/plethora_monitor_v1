@@ -38,5 +38,7 @@ utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
 aes-gcm = "0.10"
 rand = "0.8"
 base64 = "0.21"
+hex = "0.4"
 hkdf = "0.12"
 sha2 = "0.10"
+chrono = { version = "0.4", features = ["serde"] }

@@ -43,4 +43,6 @@ pub struct NotificationChannel {
     pub type_: NotificationChannelType,
     pub label: String,
     pub value: String,
+    #[serde(default)]
+    pub verified: bool,
 }

@@ -26,4 +26,4 @@ CREATE TABLE IF NOT EXISTS notification_channels (
     created_at TIMESTAMP DEFAULT current_timestamp()
 );
 
-CREATE INDEX idx_notification_channels_user_id ON notification_channels(user_id);
+CREATE INDEX IF NOT EXISTS idx_notification_channels_user_id ON notification_channels(user_id);

@@ -10,12 +10,13 @@
 //! - `GET /api/channels/:id` - Get a specific channel configuration
 //! - `PUT /api/channels/:id` - Update a channel configuration
 //! - `DELETE /api/channels/:id` - Delete a channel
+//! - `POST /api/channels/:id/resend-verification` - Resend verification email
 
 use crate::channels::handlers;
 use crate::state::AppState;
 use axum::{
-    Router,
     routing::{delete, get, post, put},
+    Router,
 };
 use std::sync::Arc;
 
@@ -26,4 +27,5 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/{id}", get(handlers::get_channel))
         .route("/{id}", put(handlers::update_channel))
         .route("/{id}", delete(handlers::delete_channel))
+        .route("/{id}/resend-verification", post(handlers::resend_verification))
 }

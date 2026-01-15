@@ -45,7 +45,11 @@ impl ToDestination for NotificationChannel {
     fn to_destination(&self) -> Option<NotificationDestination> {
         match self.type_ {
             NotificationChannelType::Email => {
-                // for email, the 'value' field in the DB is the email string
+                // we only send notifications to verified emails
+                if !self.verified {
+                    tracing::warn!("Skipping notification to unverified email: {}", self.value);
+                    return None;
+                }
                 Some(NotificationDestination::Email(self.value.clone()))
             }
             NotificationChannelType::Telegram => {

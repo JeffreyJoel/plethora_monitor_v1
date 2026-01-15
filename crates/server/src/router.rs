@@ -57,12 +57,17 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 
     let openapi = ApiDoc::openapi();
 
+    // Public routes
+    let public_routes = Router::new()
+        .route("/channels/verify", axum::routing::get(channels::handlers::verify_email_channel));
+
     let protected_routes = Router::new()
     .nest("/api", api_routes)
     .layer(middleware::auth_layer(state.clerk.clone()));
 
     Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
+        .merge(public_routes)
         .merge(protected_routes)
         .layer(cors)
         .with_state(state)

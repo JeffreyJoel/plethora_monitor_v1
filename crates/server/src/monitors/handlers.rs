@@ -395,7 +395,7 @@ pub async fn update_monitor(
                 .get_channel_by_id(channel_id, user_id)
                 .await
             {
-                Ok(Some(channel)) => channel.to_destination(),
+               Ok(Some(channel)) => channel.to_destination(),
                 Ok(None) => {
                     tracing::warn!("Notification channel {} not found", channel_id);
                     None
