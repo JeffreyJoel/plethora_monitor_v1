@@ -34,6 +34,7 @@ use axum::{
 use clerk_rs::validators::authorizer::ClerkJwt;
 use database::{MonitorRepository, ToDestination, UserRepository};
 use monitor::events::map_event_rules_to_abi;
+use monitor::primitives::chains::get_default_rpc_url;
 use monitor::primitives::utils::fetch_abi;
 use monitor::tx::map_rules_to_abi;
 use monitor::{PollingMonitor, primitives::models::MonitorConfig};
@@ -67,21 +68,35 @@ pub async fn restore_monitors(state: Arc<AppState>) {
         let monitor_id_str = monitor_id.to_string();
 
         let rpc_url = if config.rpc_url.is_empty() {
-            state.default_rpc_url.clone()
+            match get_default_rpc_url(&config.chain) {
+                Some(url) => url.to_string(),
+                None => {
+                    warn!(
+                        "No RPC URL for monitor {} (chain: {}). Skipping restoration.",
+                        monitor_id, config.chain
+                    );
+                    failed_count += 1;
+                    continue;
+                }
+            }
         } else {
             config.rpc_url.clone()
         };
 
-        // Fetch ABI - if this fails, skip the monitor
-        let abi = match fetch_abi(&config.chain, config.address, &rpc_url).await {
-            Ok(abi) => abi,
-            Err(e) => {
-                warn!(
-                    "Failed to fetch ABI for monitor {} ({}): {}. Skipping restoration.",
-                    monitor_id, config.name, e
-                );
-                failed_count += 1;
-                continue;
+        // use stored ABI (for manual ABI uploads) if available, otherwise fetch from Etherscan 
+        let abi = if let Some(stored_abi) = config.abi.clone() {
+            stored_abi
+        } else {
+            match fetch_abi(&config.chain, config.address, &rpc_url).await {
+                Ok(abi) => abi,
+                Err(e) => {
+                    warn!(
+                        "Failed to fetch ABI for monitor {} ({}): {}. Skipping restoration.",
+                        monitor_id, config.name, e
+                    );
+                    failed_count += 1;
+                    continue;
+                }
             }
         };
 
@@ -177,6 +192,15 @@ pub async fn create_monitor(
     Extension(jwt): Extension<ClerkJwt>,
     Json(payload): Json<MonitorConfig>,
 ) -> Result<Json<CreateMonitorResponse>, StatusCode> {
+    // validate ABI size if provided (1MB limit)
+    if let Some(abi) = &payload.abi {
+        let abi_size = serde_json::to_string(abi).map(|s| s.len()).unwrap_or(0);
+        if abi_size > 1_000_000 {
+            tracing::error!("ABI too large: {} bytes (max 1MB)", abi_size);
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+    }
+
     let user_repo = UserRepository::new(state.db.pool.clone());
     let user_uuid = user_repo.get_or_create(&jwt.sub, None).await.map_err(|e| {
         tracing::error!("DB User Error: {}", e);
@@ -195,20 +219,30 @@ pub async fn create_monitor(
     let monitor_id_str = monitor_id.to_string();
 
     let rpc_url = if payload.rpc_url.is_empty() {
-        state.default_rpc_url.clone()
+        get_default_rpc_url(&payload.chain)
+            .map(|s| s.to_string())
+            .ok_or_else(|| {
+                tracing::error!("Unsupported chain '{}' and no rpc_url provided", payload.chain);
+                StatusCode::BAD_REQUEST
+            })?
     } else {
         payload.rpc_url.clone()
     };
 
-    // If fetching ABI fails, the monitor is saved but won't start running.
-    // TODO: update endpoint to allow the user upload a custom ABI or Not?
-    // will come back to this.
-    let abi = fetch_abi(&payload.chain, payload.address, &rpc_url)
-        .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    // use manual ABI if provided, otherwise fetch from Etherscan 
+    let abi = if let Some(manual_abi) = payload.abi.clone() {
+        manual_abi
+    } else {
+        fetch_abi(&payload.chain, payload.address, &rpc_url)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to fetch ABI: {}. Consider providing ABI manually.", e);
+                StatusCode::BAD_REQUEST
+            })?
+    };
 
-    let function_rules = map_rules_to_abi(payload.function_rules.unwrap_or_default(), &abi);
-    let event_rules = map_event_rules_to_abi(payload.event_rules.unwrap_or_default(), &abi);
+    let function_rules = map_rules_to_abi(payload.function_rules.clone().unwrap_or_default(), &abi);
+    let event_rules = map_event_rules_to_abi(payload.event_rules.clone().unwrap_or_default(), &abi);
 
     let notification_destination = if let Some(channel_id) = payload.notification_channel_id {
         match state
@@ -350,6 +384,15 @@ pub async fn update_monitor(
     Path(monitor_id): Path<Uuid>,
     Json(payload): Json<MonitorConfig>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    // validate ABI size if provided (1MB limit)
+    if let Some(abi) = &payload.abi {
+        let abi_size = serde_json::to_string(abi).map(|s| s.len()).unwrap_or(0);
+        if abi_size > 1_000_000 {
+            tracing::error!("ABI too large: {} bytes (max 1MB)", abi_size);
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+    }
+
     let user_repo = UserRepository::new(state.db.pool.clone());
     let user_id = user_repo
         .get_or_create(&jwt.sub, None)
@@ -379,14 +422,26 @@ pub async fn update_monitor(
     }
 
     let rpc_url = if payload.rpc_url.is_empty() {
-        state.default_rpc_url.clone()
+        get_default_rpc_url(&payload.chain)
+            .map(|s| s.to_string())
+            .ok_or_else(|| {
+                tracing::error!("Unsupported chain '{}' and no rpc_url provided", payload.chain);
+                StatusCode::BAD_REQUEST
+            })?
     } else {
         payload.rpc_url.clone()
     };
 
-    if let Ok(abi) = fetch_abi(&payload.chain, payload.address, &rpc_url).await {
-        let function_rules = map_rules_to_abi(payload.function_rules.unwrap_or_default(), &abi);
-        let event_rules = map_event_rules_to_abi(payload.event_rules.unwrap_or_default(), &abi);
+    // use manual ABI if provided, otherwise fetch from Etherscan 
+    let abi_result = if let Some(manual_abi) = payload.abi.clone() {
+        Ok(manual_abi)
+    } else {
+        fetch_abi(&payload.chain, payload.address, &rpc_url).await
+    };
+
+    if let Ok(abi) = abi_result {
+        let function_rules = map_rules_to_abi(payload.function_rules.clone().unwrap_or_default(), &abi);
+        let event_rules = map_event_rules_to_abi(payload.event_rules.clone().unwrap_or_default(), &abi);
 
         let notification_destination = if let Some(channel_id) = payload.notification_channel_id {
             match state

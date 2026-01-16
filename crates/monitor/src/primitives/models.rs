@@ -4,7 +4,7 @@
 //! Defines the types used for specifying what to monitor and how to match
 //! transactions and events.
 
-use alloy::json_abi::{Event, Function};
+use alloy::json_abi::{Event, Function, JsonAbi};
 use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -52,4 +52,6 @@ pub struct MonitorConfig {
     pub event_rules: Option<Vec<MonitorRule>>,
     pub function_rules: Option<Vec<MonitorRule>>,
     pub notification_channel_id: Option<Uuid>,
+    #[schema(value_type = Option<Object>)]
+    pub abi: Option<JsonAbi>,
 }

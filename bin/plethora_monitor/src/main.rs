@@ -16,7 +16,6 @@
 //!
 //! - `DATABASE_URL` - PostgreSQL connection string (required)
 //! - `CLERK_SECRET_KEY` - Clerk authentication secret key (required)
-//! - `DEFAULT_RPC_URL` - Default RPC endpoint for blockchain connections (optional, defaults to Base Sepolia)
 //! - `PORT` - Server port (optional, defaults to 4000)
 //!
 //! ## API Endpoints
@@ -52,10 +51,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let clerk_config = ClerkConfiguration::new(None, None, Some(clerk_secret_key), None);
     let clerk_client = Clerk::new(clerk_config);
 
-    let default_rpc =
-        env::var("DEFAULT_RPC_URL").unwrap_or_else(|_| "https://sepolia.base.org".to_string());
-
-    let shared_state = Arc::new(AppState::new(default_rpc, db_pool, clerk_client));
+    let shared_state = Arc::new(AppState::new(db_pool, clerk_client));
 
     // Restore active monitors from database
     restore_monitors(shared_state.clone()).await;

@@ -10,8 +10,7 @@
 //!   Used to track running monitors and allow graceful shutdown/updates.
 //! - **`db`**: Database connection pool for persistence operations.
 //! - **`clerk`**: Clerk authentication client for JWT validation.
-//! - **`default_rpc_url`**: Fallback RPC endpoint when users don't provide custom RPCs.
-//! - **`block_watcher_registry`**: Shared registry for BlockWatcher instances per RPC URL.
+//! - **`block_watcher_registry`**: Shared registry for BlockWatcher instances per chain.
 //!   Reduces RPC calls by consolidating block polling across multiple monitors.
 //!
 //! ## Thread Safety
@@ -34,17 +33,15 @@ pub struct AppState {
     pub active_monitors: Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
     pub db: DbPool,
     pub clerk: Clerk,
-    pub default_rpc_url: String,
     pub block_watcher_registry: Arc<BlockWatcherRegistry>,
 }
 
 impl AppState {
-    pub fn new(default_rpc: String, db: DbPool, clerk: Clerk) -> Self {
+    pub fn new(db: DbPool, clerk: Clerk) -> Self {
         Self {
             active_monitors: Arc::new(RwLock::new(HashMap::new())),
             db,
             clerk,
-            default_rpc_url: default_rpc,
             block_watcher_registry: Arc::new(BlockWatcherRegistry::new()),
         }
     }
