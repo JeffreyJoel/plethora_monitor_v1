@@ -137,4 +137,17 @@ impl MonitorRepository {
 
         Ok(())
     }
+
+    /// Count active monitors for a user (for limit enforcement)
+    pub async fn count_by_user(&self, user_id: Uuid) -> Result<i64, sqlx::Error> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM monitors WHERE user_id = $1 AND is_active = true",
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(count)
+    }
 }
+

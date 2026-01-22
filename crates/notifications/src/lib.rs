@@ -41,6 +41,32 @@ pub trait ToDestination {
     fn to_destination(&self) -> Option<NotificationDestination>;
 }
 
+/// Trait for sending notifications - enables polymorphic notification handling
+/// with or without limit checking.
+#[async_trait::async_trait]
+pub trait NotificationSender: Send + Sync {
+    /// Send an alert notification
+    async fn send(&self, alert: &Alert) -> Result<(), anyhow::Error>;
+}
+
+/// Simple notification sender that sends directly without limit checking
+pub struct DirectNotificationSender {
+    destination: NotificationDestination,
+}
+
+impl DirectNotificationSender {
+    pub fn new(destination: NotificationDestination) -> Self {
+        Self { destination }
+    }
+}
+
+#[async_trait::async_trait]
+impl NotificationSender for DirectNotificationSender {
+    async fn send(&self, alert: &Alert) -> Result<(), anyhow::Error> {
+        send_notification(&self.destination, alert).await
+    }
+}
+
 impl ToDestination for NotificationChannel {
     fn to_destination(&self) -> Option<NotificationDestination> {
         match self.type_ {
@@ -112,7 +138,7 @@ impl fmt::Display for NotificationChannelType {
 
 impl TryFrom<String> for NotificationChannelType {
     type Error = String;
-    
+
     fn try_from(s: String) -> Result<Self, Self::Error> {
         match s.to_lowercase().as_str() {
             "email" => Ok(NotificationChannelType::Email),
@@ -120,7 +146,7 @@ impl TryFrom<String> for NotificationChannelType {
             "discord" => Ok(NotificationChannelType::Discord),
             "slack" => Ok(NotificationChannelType::Slack),
             "webhook" => Ok(NotificationChannelType::Webhook),
-            _ => Err(format!("Invalid notification channel type: {}", s))
+            _ => Err(format!("Invalid notification channel type: {}", s)),
         }
     }
 }
