@@ -23,7 +23,7 @@
 //! Only the Swagger UI and OpenAPI spec endpoints are publicly accessible.
 
 use crate::state::AppState;
-use crate::{channels, middleware, monitors, users};
+use crate::{billing, channels, middleware, monitors, users};
 use crate::docs::ApiDoc;
 use axum::http::{Method, header};
 use axum::{Router};
@@ -38,7 +38,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let api_routes = Router::new()
         .nest("/monitors", monitors::routes::routes())
         .nest("/users", users::routes::routes())
-        .nest("/channels", channels::routes::routes());
+        .nest("/channels", channels::routes::routes())
+        .nest("/billing", billing::routes::routes());
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin, _request_head| {

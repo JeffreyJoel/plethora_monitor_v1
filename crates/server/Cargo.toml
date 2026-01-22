@@ -11,6 +11,7 @@ utils = {path = "../utils" }
 
 alloy = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 axum = { workspace = true }
 clerk-rs = { workspace = true }
 futures = {workspace = true}

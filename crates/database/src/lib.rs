@@ -17,6 +17,8 @@
 //! - **`users`** - User repository for authentication and profile data
 //! - **`monitors`** - Monitor configuration persistence
 //! - **`channels`** - Notification channel storage
+//! - **`subscriptions`** - Subscription and plan management for billing
+//! - **`usage`** - Usage tracking for limits enforcement
 //!
 //! ## Data Models
 //!
@@ -25,6 +27,8 @@
 //! - **Users**: Clerk ID, email, and profile information
 //! - **Monitors**: Monitor configurations (stored as JSONB for flexibility)
 //! - **Channels**: Notification channel configurations (email, webhook, etc.)
+//! - **Subscriptions**: User subscription plans and Stripe integration
+//! - **Usage**: Monthly usage tracking for billing limits
 //!
 //! ## Usage
 //!
@@ -40,6 +44,8 @@ pub mod channels;
 pub mod connection;
 pub mod migrations;
 pub mod monitors;
+pub mod subscriptions;
+pub mod usage;
 pub mod users;
 
 // re-export specific items for cleaner imports
@@ -47,7 +53,7 @@ pub use channels::repository::ChannelRepository;
 pub use connection::DbPool;
 pub use migrations::run_migrations;
 pub use monitors::repository::MonitorRepository;
-pub use users::repository::UserRepository;
-
-// re-export notification traits
 pub use notifications::ToDestination;
+pub use subscriptions::{Plan, Subscription, SubscriptionRepository, SubscriptionStatus};
+pub use usage::{NotificationResult, Usage, UsageLimiter, UsageRepository};
+pub use users::repository::UserRepository;

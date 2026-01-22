@@ -29,10 +29,12 @@
 //! The server is typically started via the `plethora_monitor` binary,
 //! which initializes the application state and starts the HTTP server.
 
+pub mod billing;
 pub mod channels;
 pub mod docs;
 pub mod middleware;
 pub mod monitors;
+pub mod notification_service;
 pub mod router;
 pub mod state;
 pub mod users;

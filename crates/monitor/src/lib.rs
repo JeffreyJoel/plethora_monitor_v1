@@ -68,14 +68,14 @@ pub mod primitives;
 pub mod tx;
 
 pub use block_watcher::{BlockUpdate, BlockWatcher, BlockWatcherRegistry};
-pub use primitives::chains::normalize_chain_name;
 pub use events::EventMatcher;
-use notifications::primitives::models::{Alert, NotificationDestination};
+pub use notifications::NotificationSender;
+use notifications::primitives::models::Alert;
+pub use primitives::chains::normalize_chain_name;
 pub use tx::TxMatcher;
 
 use crate::primitives::models::MonitorRule;
 use crate::tx::get_tx_details;
-use notifications::send_notification;
 
 use alloy::json_abi::JsonAbi;
 use alloy::network::{AnyNetwork, TransactionResponse};
@@ -85,10 +85,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::primitives::chains::get_infura_url;
 use futures::future::{BoxFuture, FutureExt, join_all};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
@@ -178,7 +178,10 @@ impl PollingMonitor {
 
     /// Records a successful RPC call, resetting the failure counter.
     pub fn record_success(&self) {
-        let prev_failures = self.provider_state.consecutive_failures.swap(0, Ordering::Relaxed);
+        let prev_failures = self
+            .provider_state
+            .consecutive_failures
+            .swap(0, Ordering::Relaxed);
         if prev_failures > 0 {
             info!(
                 "Provider for chain '{}' recovered after {} failures",
@@ -222,22 +225,14 @@ impl PollingMonitor {
 
         if should_check {
             // Try a simple call to primary to see if it's back
-            if self
-                .primary_provider
-                .get_block_number()
-                .await
-                .is_ok()
-            {
+            if self.primary_provider.get_block_number().await.is_ok() {
                 self.provider_state
                     .use_fallback
                     .store(false, Ordering::Relaxed);
                 self.provider_state
                     .consecutive_failures
                     .store(0, Ordering::Relaxed);
-                info!(
-                    "Recovered to primary provider for chain '{}'",
-                    self.chain
-                );
+                info!("Recovered to primary provider for chain '{}'", self.chain);
             }
             // Update last check time
             *self.provider_state.last_primary_check.write().await = Instant::now();
@@ -249,7 +244,6 @@ impl PollingMonitor {
         self.provider_state.use_fallback.load(Ordering::Relaxed)
     }
 
-
     /// Starts background monitoring using a shared BlockWatcherRegistry.
     /// Monitors on the same chain share a single BlockWatcher to reduce RPC calls.
     pub async fn start_background_monitoring_with_watcher(
@@ -257,7 +251,7 @@ impl PollingMonitor {
         name: String,
         function_rules: Vec<MonitorRule>,
         event_rules: Vec<MonitorRule>,
-        destination: Option<NotificationDestination>,
+        notification_sender: Option<Arc<dyn NotificationSender>>,
         registry: Arc<BlockWatcherRegistry>,
     ) -> Result<JoinHandle<()>, anyhow::Error> {
         // Subscribe to block updates from the shared watcher (keyed by chain name)
@@ -267,7 +261,7 @@ impl PollingMonitor {
             name,
             function_rules,
             event_rules,
-            destination,
+            notification_sender,
             block_receiver,
         ))
     }
@@ -278,7 +272,7 @@ impl PollingMonitor {
         name: String,
         function_rules: Vec<MonitorRule>,
         event_rules: Vec<MonitorRule>,
-        destination: Option<NotificationDestination>,
+        notification_sender: Option<Arc<dyn NotificationSender>>,
         block_receiver: broadcast::Receiver<BlockUpdate>,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
@@ -289,7 +283,7 @@ impl PollingMonitor {
                 let monitor_tx = self.clone();
                 let n = name.clone();
                 let abi = self.contract_abi.clone();
-                let dest_for_tx = destination.clone();
+                let sender_for_tx = notification_sender.clone();
                 let block_rx = block_receiver.resubscribe();
 
                 let tx_future = async move {
@@ -307,19 +301,18 @@ impl PollingMonitor {
                                 details
                             );
 
-                            if let Some(dest) = &dest_for_tx {
+                            if let Some(sender) = &sender_for_tx {
                                 let alert = Alert {
                                     source: n.clone(),
                                     subject: "TX ALERT".to_string(),
                                     message: msg,
                                 };
 
-                                let dest_clone = dest.clone();
+                                let sender_clone = Arc::clone(sender);
 
                                 tokio::spawn(async move {
-                                    if let Err(e) = send_notification(&dest_clone, &alert).await {
+                                    if let Err(e) = sender_clone.send(&alert).await {
                                         error!(
-                                            destination = ?dest_clone,
                                             source = %alert.source,
                                             subject = %alert.subject,
                                             "Failed to send notification: {e}"
@@ -339,7 +332,7 @@ impl PollingMonitor {
                 let monitor_events = self.clone();
                 let n = name.clone();
                 let abi = self.contract_abi.clone();
-                let dest_for_events = destination.clone();
+                let sender_for_events = notification_sender.clone();
                 let event_rules_ref: Vec<MonitorRule> = event_rules.clone();
                 let block_rx = block_receiver.resubscribe();
 
@@ -367,21 +360,18 @@ impl PollingMonitor {
                                         n, block, event_details
                                     );
 
-                                    if let Some(dest) = &dest_for_events {
+                                    if let Some(sender) = &sender_for_events {
                                         let alert = Alert {
                                             source: n.clone(),
                                             subject: "Event ALERT".to_string(),
                                             message: msg,
                                         };
 
-                                        let dest_clone = dest.clone();
+                                        let sender_clone = Arc::clone(sender);
 
                                         tokio::spawn(async move {
-                                            if let Err(e) =
-                                                send_notification(&dest_clone, &alert).await
-                                            {
+                                            if let Err(e) = sender_clone.send(&alert).await {
                                                 error!(
-                                                    destination = ?dest_clone,
                                                     source = %alert.source,
                                                     subject = %alert.subject,
                                                     "Failed to send notification: {e}"

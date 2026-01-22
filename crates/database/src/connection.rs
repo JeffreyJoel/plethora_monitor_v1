@@ -9,7 +9,7 @@ use std::time::Duration;
 use anyhow;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
-use crate::{ChannelRepository, MonitorRepository, UserRepository};
+use crate::{ChannelRepository, MonitorRepository, SubscriptionRepository, UsageRepository, UserRepository};
 
 #[derive(Clone)]
 pub struct DbPool {
@@ -17,6 +17,8 @@ pub struct DbPool {
     pub users: UserRepository,
     pub monitors: MonitorRepository,
     pub channels: ChannelRepository,
+    pub subscriptions: SubscriptionRepository,
+    pub usage: UsageRepository,
 }
 
 impl DbPool {
@@ -32,6 +34,9 @@ impl DbPool {
             users: UserRepository::new(pool.clone()),
             monitors: MonitorRepository::new(pool.clone()),
             channels: ChannelRepository::new(pool.clone()),
+            subscriptions: SubscriptionRepository::new(pool.clone()),
+            usage: UsageRepository::new(pool),
         })
     }
 }
+

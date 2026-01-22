@@ -22,3 +22,6 @@ target/
 .envrc
 .direnv/
 .cargo
+
+
+/migrations/

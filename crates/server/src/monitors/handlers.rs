@@ -24,6 +24,7 @@
 
 use crate::{
     monitors::models::{CreateMonitorResponse, MonitorResponse},
+    notification_service::LimitedNotificationSender,
     state::AppState,
 };
 use axum::{
@@ -32,20 +33,20 @@ use axum::{
     http::StatusCode,
 };
 use clerk_rs::validators::authorizer::ClerkJwt;
-use database::{MonitorRepository, ToDestination, UserRepository};
+use database::{MonitorRepository, ToDestination, UsageLimiter, UserRepository};
 use monitor::events::map_event_rules_to_abi;
 use monitor::primitives::chains::get_default_rpc_url;
 use monitor::primitives::utils::fetch_abi;
 use monitor::tx::map_rules_to_abi;
-use monitor::{PollingMonitor, primitives::models::MonitorConfig};
+use monitor::{NotificationSender, PollingMonitor, primitives::models::MonitorConfig};
 use std::sync::Arc;
-use tracing::{error, warn, info};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// Restores all active monitors from the database on server startup
 pub async fn restore_monitors(state: Arc<AppState>) {
     let monitor_repo = MonitorRepository::new(state.db.pool.clone());
-    
+
     let monitors = match monitor_repo.get_all_active().await {
         Ok(m) => m,
         Err(e) => {
@@ -59,7 +60,10 @@ pub async fn restore_monitors(state: Arc<AppState>) {
         return;
     }
 
-    info!("Restoring {} active monitor(s) from database...", monitors.len());
+    info!(
+        "Restoring {} active monitor(s) from database...",
+        monitors.len()
+    );
 
     let mut restored_count = 0;
     let mut failed_count = 0;
@@ -83,7 +87,7 @@ pub async fn restore_monitors(state: Arc<AppState>) {
             config.rpc_url.clone()
         };
 
-        // use stored ABI (for manual ABI uploads) if available, otherwise fetch from Etherscan 
+        // use stored ABI (for manual ABI uploads) if available, otherwise fetch from Etherscan
         let abi = if let Some(stored_abi) = config.abi.clone() {
             stored_abi
         } else {
@@ -100,13 +104,31 @@ pub async fn restore_monitors(state: Arc<AppState>) {
             }
         };
 
-        let function_rules = map_rules_to_abi(config.function_rules.clone().unwrap_or_default(), &abi);
-        let event_rules = map_event_rules_to_abi(config.event_rules.clone().unwrap_or_default(), &abi);
+        let function_rules =
+            map_rules_to_abi(config.function_rules.clone().unwrap_or_default(), &abi);
+        let event_rules =
+            map_event_rules_to_abi(config.event_rules.clone().unwrap_or_default(), &abi);
 
-        // Fetch notification channel if configured
-        let notification_destination = if let Some(channel_id) = config.notification_channel_id {
-            match state.db.channels.get_channel_by_id(channel_id, user_id).await {
-                Ok(Some(channel)) => channel.to_destination(),
+        // Fetch notification channel if configured and wrap with limit enforcement
+        let notification_sender: Option<Arc<dyn NotificationSender>> = if let Some(channel_id) =
+            config.notification_channel_id
+        {
+            match state
+                .db
+                .channels
+                .get_channel_by_id(channel_id, user_id)
+                .await
+            {
+                Ok(Some(channel)) => {
+                    if let Some(dest) = channel.to_destination() {
+                        let limiter = Arc::new(UsageLimiter::new(state.db.pool.clone()));
+                        Some(Arc::new(LimitedNotificationSender::new(
+                            dest, user_id, limiter,
+                        )))
+                    } else {
+                        None
+                    }
+                }
                 Ok(None) => {
                     warn!(
                         "Notification channel {} not found for monitor {}. Continuing without notifications.",
@@ -134,7 +156,7 @@ pub async fn restore_monitors(state: Arc<AppState>) {
                         config.name.clone(),
                         function_rules,
                         event_rules,
-                        notification_destination,
+                        notification_sender,
                         state.block_watcher_registry.clone(),
                     )
                     .await
@@ -207,6 +229,51 @@ pub async fn create_monitor(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
+    // Check subscription limits before creating monitor
+    let subscription = state
+        .db
+        .subscriptions
+        .get_or_create_subscription(user_uuid)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get subscription: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let plan = state
+        .db
+        .subscriptions
+        .get_plan(&subscription.plan_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get plan: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or_else(|| {
+            tracing::error!("Plan not found: {}", subscription.plan_id);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let current_monitor_count = state
+        .db
+        .monitors
+        .count_by_user(user_uuid)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to count monitors: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    if !plan.can_create_monitor(current_monitor_count) {
+        tracing::warn!(
+            "User {} exceeded monitor limit ({}/{})",
+            user_uuid,
+            current_monitor_count,
+            plan.monitor_limit
+        );
+        return Err(StatusCode::PAYMENT_REQUIRED); // 402
+    }
+
     let monitor_repo = MonitorRepository::new(state.db.pool.clone());
     let monitor_id = monitor_repo
         .create(user_uuid, &payload)
@@ -222,21 +289,27 @@ pub async fn create_monitor(
         get_default_rpc_url(&payload.chain)
             .map(|s| s.to_string())
             .ok_or_else(|| {
-                tracing::error!("Unsupported chain '{}' and no rpc_url provided", payload.chain);
+                tracing::error!(
+                    "Unsupported chain '{}' and no rpc_url provided",
+                    payload.chain
+                );
                 StatusCode::BAD_REQUEST
             })?
     } else {
         payload.rpc_url.clone()
     };
 
-    // use manual ABI if provided, otherwise fetch from Etherscan 
+    // use manual ABI if provided, otherwise fetch from Etherscan
     let abi = if let Some(manual_abi) = payload.abi.clone() {
         manual_abi
     } else {
         fetch_abi(&payload.chain, payload.address, &rpc_url)
             .await
             .map_err(|e| {
-                tracing::error!("Failed to fetch ABI: {}. Consider providing ABI manually.", e);
+                tracing::error!(
+                    "Failed to fetch ABI: {}. Consider providing ABI manually.",
+                    e
+                );
                 StatusCode::BAD_REQUEST
             })?
     };
@@ -244,26 +317,36 @@ pub async fn create_monitor(
     let function_rules = map_rules_to_abi(payload.function_rules.clone().unwrap_or_default(), &abi);
     let event_rules = map_event_rules_to_abi(payload.event_rules.clone().unwrap_or_default(), &abi);
 
-    let notification_destination = if let Some(channel_id) = payload.notification_channel_id {
-        match state
-            .db
-            .channels
-            .get_channel_by_id(channel_id, user_uuid)
-            .await
-        {
-            Ok(Some(channel)) => channel.to_destination(),
-            Ok(None) => {
-                tracing::warn!("Notification channel {} not found", channel_id);
-                None
+    let notification_sender: Option<Arc<dyn NotificationSender>> =
+        if let Some(channel_id) = payload.notification_channel_id {
+            match state
+                .db
+                .channels
+                .get_channel_by_id(channel_id, user_uuid)
+                .await
+            {
+                Ok(Some(channel)) => {
+                    if let Some(dest) = channel.to_destination() {
+                        let limiter = Arc::new(UsageLimiter::new(state.db.pool.clone()));
+                        Some(Arc::new(LimitedNotificationSender::new(
+                            dest, user_uuid, limiter,
+                        )))
+                    } else {
+                        None
+                    }
+                }
+                Ok(None) => {
+                    tracing::warn!("Notification channel {} not found", channel_id);
+                    None
+                }
+                Err(e) => {
+                    tracing::error!("Failed to fetch notification channel: {}", e);
+                    None
+                }
             }
-            Err(e) => {
-                tracing::error!("Failed to fetch notification channel: {}", e);
-                None
-            }
-        }
-    } else {
-        None
-    };
+        } else {
+            None
+        };
 
     let monitor_engine = PollingMonitor::new(&rpc_url, payload.address, abi, &payload.chain)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -273,7 +356,7 @@ pub async fn create_monitor(
             payload.name.clone(),
             function_rules,
             event_rules,
-            notification_destination,
+            notification_sender,
             state.block_watcher_registry.clone(),
         )
         .await
@@ -425,14 +508,17 @@ pub async fn update_monitor(
         get_default_rpc_url(&payload.chain)
             .map(|s| s.to_string())
             .ok_or_else(|| {
-                tracing::error!("Unsupported chain '{}' and no rpc_url provided", payload.chain);
+                tracing::error!(
+                    "Unsupported chain '{}' and no rpc_url provided",
+                    payload.chain
+                );
                 StatusCode::BAD_REQUEST
             })?
     } else {
         payload.rpc_url.clone()
     };
 
-    // use manual ABI if provided, otherwise fetch from Etherscan 
+    // use manual ABI if provided, otherwise fetch from Etherscan
     let abi_result = if let Some(manual_abi) = payload.abi.clone() {
         Ok(manual_abi)
     } else {
@@ -440,29 +526,41 @@ pub async fn update_monitor(
     };
 
     if let Ok(abi) = abi_result {
-        let function_rules = map_rules_to_abi(payload.function_rules.clone().unwrap_or_default(), &abi);
-        let event_rules = map_event_rules_to_abi(payload.event_rules.clone().unwrap_or_default(), &abi);
+        let function_rules =
+            map_rules_to_abi(payload.function_rules.clone().unwrap_or_default(), &abi);
+        let event_rules =
+            map_event_rules_to_abi(payload.event_rules.clone().unwrap_or_default(), &abi);
 
-        let notification_destination = if let Some(channel_id) = payload.notification_channel_id {
-            match state
-                .db
-                .channels
-                .get_channel_by_id(channel_id, user_id)
-                .await
-            {
-               Ok(Some(channel)) => channel.to_destination(),
-                Ok(None) => {
-                    tracing::warn!("Notification channel {} not found", channel_id);
-                    None
+        let notification_sender: Option<Arc<dyn NotificationSender>> =
+            if let Some(channel_id) = payload.notification_channel_id {
+                match state
+                    .db
+                    .channels
+                    .get_channel_by_id(channel_id, user_id)
+                    .await
+                {
+                    Ok(Some(channel)) => {
+                        if let Some(dest) = channel.to_destination() {
+                            let limiter = Arc::new(UsageLimiter::new(state.db.pool.clone()));
+                            Some(Arc::new(LimitedNotificationSender::new(
+                                dest, user_id, limiter,
+                            )))
+                        } else {
+                            None
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::warn!("Notification channel {} not found", channel_id);
+                        None
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to fetch notification channel: {}", e);
+                        None
+                    }
                 }
-                Err(e) => {
-                    tracing::error!("Failed to fetch notification channel: {}", e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
+            } else {
+                None
+            };
 
         if let Ok(engine) = PollingMonitor::new(&rpc_url, payload.address, abi, &payload.chain) {
             match engine
@@ -470,7 +568,7 @@ pub async fn update_monitor(
                     payload.name.clone(),
                     function_rules,
                     event_rules,
-                    notification_destination,
+                    notification_sender,
                     state.block_watcher_registry.clone(),
                 )
                 .await
