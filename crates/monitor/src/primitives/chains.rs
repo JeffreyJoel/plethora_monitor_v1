@@ -34,11 +34,11 @@ pub fn get_default_rpc_url(chain_name: &str) -> Option<&'static str> {
     let normalized = normalize_chain_name(chain_name);
 
     match normalized.as_str() {
-        "mainnet" | "ethereum" | "ethereum_mainnet" => Some("https://eth.llamarpc.com"),
-        "sepolia" | "ethereum_sepolia" => Some("https://rpc.sepolia.org"),
+        "mainnet" | "ethereum" | "ethereum_mainnet" => Some("https://ethereum-rpc.publicnode.com"),
+        "sepolia" | "ethereum_sepolia" => Some("https://ethereum-sepolia-rpc.publicnode.com"),
 
-        "base" | "base_mainnet" => Some("https://mainnet.base.org"),
-        "base_sepolia" => Some("https://sepolia.base.org"),
+        "base" | "base_mainnet" => Some("https://base-rpc.publicnode.com"),
+        "base_sepolia" => Some("https://base-sepolia-rpc.publicnode.com"),
 
         "polygon" | "polygon_mainnet" | "matic" | "matic_mainnet" => {
             Some("https://polygon-rpc.com")
@@ -61,10 +61,10 @@ pub fn get_default_rpc_url(chain_name: &str) -> Option<&'static str> {
         }
 
         "bsc" | "bnb" | "binance" | "bsc_mainnet" | "bnb_mainnet" => {
-            Some("https://bsc-dataseed.binance.org")
+            Some("https://bsc-rpc.publicnode.com")
         }
         "bsc_testnet" | "bnb_testnet" | "binance_testnet" => {
-            Some("https://data-seed-prebsc-1-s1.binance.org:8545")
+            Some("https://bsc-testnet-rpc.publicnode.com")
         }
 
         "celo" | "celo_mainnet" => Some("https://forno.celo.org"),
