@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_user_period ON usage(user_id, period_start)
 
 -- Seed default plans
 INSERT INTO plans (id, stripe_price_id, monitor_limit, notification_limit, overage_price_cents) VALUES
-    ('free', NULL, 2, 100, 0),
+    ('free', NULL, 5, 200, 0),
     ('pro', NULL, 10, 5000, 20),
     ('business', NULL, -1, 50000, 10)
 ON CONFLICT (id) DO NOTHING;
