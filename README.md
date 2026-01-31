@@ -1,8 +1,12 @@
 # Plethora Monitor
 
-🚧 *Under active development.* 🚧
+#RustAfricaHackathon
 
-Plethora Monitor is a high-performance, dynamic EVM blockchain monitoring agent written in Rust. It is designed to track smart contract events and transactions in real-time, allowing users to spawn, manage, and supervise monitoring tasks dynamically via a REST API.
+🚀 **[Try the Live Demo](https://plethora-monitor-ui.vercel.app/)** 🚀
+
+🚧 _Under active development._ 🚧
+
+Plethora Monitor is a high-performance, dynamic smart contract monitoring agent written in Rust. It is designed to track smart contract events and transactions in real-time, allowing users to spawn, manage, and supervise monitoring tasks dynamically via a REST API.
 
 ## Architecture Overview
 
@@ -29,21 +33,65 @@ Plethora Monitor is a high-performance, dynamic EVM blockchain monitoring agent 
     - Abstracted via `ToDestination` trait.
     - Manages different channel types (e.g., Email, Webhook).
 
-## Features & Status
+## Current Functionality ✨
 
-- [x] **Workspace Setup**: Modular crate structure.
-- [x] **Core Engine**: Resilient polling and event detection.
-- [x] **Rule Engine**: Dynamic ABI decoding and argument filtering.
-- [x] **API & Docs**: REST API with Swagger UI/OpenAPI support.
-- [x] **Authentication**: User management via Clerk integration.
-- [x] **Persistence**: CockroachDB storage for monitors and user data.
-- [x] **Notifications**: Flexible notification channels (Email, Webhook).
-- [ ] **Metrics**: Prometheus metrics for monitoring performance.
-- [ ] **Tests**: Comprehensive unit and integration tests.
+Plethora Monitor is **production-ready** with the following features:
+
+### 🔗 Multi-Chain Support
+
+Monitor events and transactions across multiple EVM-compatible blockchains:
+
+- **Ethereum**: Mainnet, Sepolia
+- **Base**: Mainnet, Sepolia
+- **Other EVM-compatible blockchains**: In progress
+
+### 🎯 Advanced Monitoring
+
+- **Event Monitoring**: Track specific smart contract events with custom filters
+- **Transaction Monitoring**: Detect function calls matching specific conditions
+- **Dynamic Rule Engine**:
+  - Automatic ABI fetching from block explorers
+  - Support for proxy contract detection
+  - Flexible argument filtering with operators: `eq`, `gt`, `lt`, `contains`
+  - Multi-condition rules (AND logic)
+
+### 🔔 Notification Channels
+
+- **Email Notifications**: SMTP-based email alerts with verification
+- **Webhook Support**: HTTP POST to custom endpoints _(coming soon)_
+- **Discord Integration**: Discord webhook notifications _(coming soon)_
+- **Slack Integration**: Slack webhook notifications _(coming soon)_
+
+### 🔐 Authentication & Security
+
+- **Clerk Integration**: Secure user authentication
+- **API Key Management**: Protected REST endpoints
+- **Email Verification**: Required for email notification channels
+
+### 📊 API & Documentation
+
+- **REST API**: Full CRUD operations for monitors and channels
+- **OpenAPI/Swagger**: Interactive API documentation at `/swagger-ui`
+- **Real-time Status**: Monitor health and activity tracking
+
+### 🗄️ Data Persistence
+
+- **CockroachDB**: Distributed SQL database for reliability
+- **SQLx**: Type-safe database queries
+- **Automatic Migrations**: Schema versioning and updates
+
+## Roadmap
+
+- [ ] **Metrics**: Prometheus metrics for monitoring performance
+- [ ] **Tests**: Comprehensive unit and integration tests
+- [ ] **WebSocket Support**: Real-time event streaming
+- [ ] **Discord/Slack Channels**: Complete notification integrations
+- [ ] **Additional Blockchains**: Solana, Stellar, and Polkadot support
 
 ## Getting Started
 
 ### Prerequisites
+
 - Rust (edition 2024)
 - PostgreSQL Database
 - An Etherscan/Basescan API Key (for ABI fetching)
@@ -52,18 +100,21 @@ Plethora Monitor is a high-performance, dynamic EVM blockchain monitoring agent 
 ### Installation
 
 1.  Clone the repository:
+
     ```bash
     git clone <repository-url>
     cd plethora_monitor
     ```
 
 2.  Set up your environment:
+
     ```bash
     cp .env.example .env
     # Configure DB_URL, ETHERSCAN_API_KEY, CLERK_SECRET_KEY, etc.
     ```
 
 3.  Run migrations:
+
     ```bash
     sqlx migrate run
     ```
@@ -76,6 +127,7 @@ Plethora Monitor is a high-performance, dynamic EVM blockchain monitoring agent 
 ## API Documentation
 
 Once the server is running, visit:
+
 - **Swagger UI**: `http://localhost:4000/swagger-ui`
 - **OpenAPI Spec**: `http://localhost:4000/api-docs/openapi.json`
 
