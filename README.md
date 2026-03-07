@@ -1,7 +1,5 @@
 # Plethora Monitor
 
-#RustAfricaHackathon
-
 🚀 **[Try the Live Demo](https://plethora-monitor-ui.vercel.app/)** 🚀
 
 🚧 _Under active development._ 🚧
